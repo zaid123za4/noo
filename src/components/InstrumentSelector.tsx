@@ -1,6 +1,5 @@
-
 import React, { useEffect, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Brain } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -11,8 +10,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import zerodhaService from '@/services/zerodhaService';
 import { PredictionResult } from '@/services/zerodhaService';
+import { getSymbolPerformance } from '@/services/tradingLearning';
 
 interface InstrumentSelectorProps {
   onSymbolSelect: (symbol: string) => void;
@@ -30,6 +31,10 @@ const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [instrumentType, setInstrumentType] = useState<'stocks' | 'crypto'>('stocks');
   const [loading, setLoading] = useState(true);
+  const [symbolsWithLearning, setSymbolsWithLearning] = useState<Record<string, {
+    successRate: number;
+    adjustmentFactor: number;
+  }>>({});
 
   useEffect(() => {
     const fetchInstruments = async () => {
@@ -38,6 +43,24 @@ const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({
         const { stocks, cryptos } = await zerodhaService.getAvailableSymbols();
         setStocksList(stocks);
         setCryptosList(cryptos);
+        
+        // Get learning data for all symbols
+        const learningData: Record<string, {
+          successRate: number;
+          adjustmentFactor: number;
+        }> = {};
+        
+        [...stocks, ...cryptos].forEach(symbol => {
+          const performance = getSymbolPerformance(symbol);
+          if (performance && performance.totalTrades > 0) {
+            learningData[symbol] = {
+              successRate: performance.successRate,
+              adjustmentFactor: performance.adjustmentFactor
+            };
+          }
+        });
+        
+        setSymbolsWithLearning(learningData);
       } catch (error) {
         console.error('Failed to fetch instruments:', error);
       } finally {
@@ -88,28 +111,58 @@ const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({
           <div className="p-4 text-center text-muted-foreground">Loading instruments...</div>
         ) : filteredInstruments.length > 0 ? (
           <div className="divide-y divide-border">
-            {filteredInstruments.map((instrument) => (
-              <button
-                key={instrument}
-                className={`w-full px-4 py-2 text-left hover:bg-accent hover:text-accent-foreground ${
-                  selectedSymbol === instrument ? 'bg-accent text-accent-foreground' : ''
-                }`}
-                onClick={() => onSymbolSelect(instrument)}
-              >
-                {instrument}
-                {predictionData && selectedSymbol === instrument && (
-                  <span className={`ml-2 px-2 py-0.5 text-xs rounded ${
-                    predictionData.action === 'BUY' 
-                      ? 'bg-trade-buy/20 text-trade-buy' 
-                      : predictionData.action === 'SELL'
-                        ? 'bg-trade-sell/20 text-trade-sell'
-                        : 'bg-muted/20 text-muted-foreground'
-                    }`}>
-                    {predictionData.action}
-                  </span>
-                )}
-              </button>
-            ))}
+            {filteredInstruments.map((instrument) => {
+              const hasLearningData = symbolsWithLearning[instrument];
+              
+              return (
+                <button
+                  key={instrument}
+                  className={`w-full px-4 py-2 text-left hover:bg-accent hover:text-accent-foreground ${
+                    selectedSymbol === instrument ? 'bg-accent text-accent-foreground' : ''
+                  }`}
+                  onClick={() => onSymbolSelect(instrument)}
+                >
+                  <div className="flex justify-between items-center">
+                    <span>{instrument}</span>
+                    <div className="flex items-center gap-2">
+                      {hasLearningData && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className={`flex items-center ${
+                                hasLearningData.successRate > 0.6 
+                                  ? 'text-trade-buy' 
+                                  : hasLearningData.successRate < 0.4 
+                                    ? 'text-trade-sell' 
+                                    : 'text-muted-foreground'
+                              }`}>
+                                <Brain className="h-3.5 w-3.5" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>AI learning: {(hasLearningData.successRate * 100).toFixed(1)}% success rate</p>
+                              <p>Confidence adjustment: ×{hasLearningData.adjustmentFactor.toFixed(2)}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      
+                      {predictionData && selectedSymbol === instrument && (
+                        <span className={`px-2 py-0.5 text-xs rounded ${
+                          predictionData.action === 'BUY' 
+                            ? 'bg-trade-buy/20 text-trade-buy' 
+                            : predictionData.action === 'SELL'
+                              ? 'bg-trade-sell/20 text-trade-sell'
+                              : 'bg-muted/20 text-muted-foreground'
+                          }`}>
+                          {predictionData.action}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="p-4 text-center text-muted-foreground">No instruments found</div>

@@ -1,16 +1,16 @@
-
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import zerodhaService, { UserProfile, Funds, Order, PredictionResult } from '@/services/zerodhaService';
-import { ArrowDown, ArrowUp, Clock, DollarSign, History, LineChart, Info, AlertTriangle } from 'lucide-react';
+import { ArrowDown, ArrowUp, Clock, DollarSign, History, LineChart, Info, AlertTriangle, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { autoTradeExecutor, runTradingStrategy, runAllSymbolsStrategy } from '@/services/tradingStrategy';
 import { useNavigate } from 'react-router-dom';
 import InstrumentSelector from './InstrumentSelector';
+import { getSymbolPerformance, getRecentPredictions } from '@/services/tradingLearning';
 
 const Dashboard: React.FC = () => {
   const { toast } = useToast();
@@ -27,6 +27,12 @@ const Dashboard: React.FC = () => {
   const [selectedSymbol, setSelectedSymbol] = useState('NIFTY');
   const [tradeQuantity, setTradeQuantity] = useState(1);
   const [tradeAllSymbols, setTradeAllSymbols] = useState(false);
+  const [symbolPerformance, setSymbolPerformance] = useState<{
+    successRate: number;
+    totalTrades: number;
+    profitLossTotal: number;
+    adjustmentFactor: number;
+  } | null>(null);
   
   // Check if user is logged in
   useEffect(() => {
@@ -53,6 +59,14 @@ const Dashboard: React.FC = () => {
       loadPredictionForSymbol(selectedSymbol);
     }
   }, [selectedSymbol]);
+  
+  useEffect(() => {
+    // Load performance data when selected symbol changes
+    if (selectedSymbol) {
+      const performance = getSymbolPerformance(selectedSymbol);
+      setSymbolPerformance(performance);
+    }
+  }, [selectedSymbol, logs]); // Re-run when logs update as they indicate new trades
   
   const loadData = async () => {
     try {
@@ -381,6 +395,112 @@ const Dashboard: React.FC = () => {
           </CardContent>
         </Card>
         
+        {/* Learning Performance Card */}
+        <Card className="border-border/50 bg-card/95 backdrop-blur">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Brain className="h-4 w-4" />
+              AI Learning Performance
+            </CardTitle>
+            {symbolPerformance && (
+              <Badge variant="outline" className={`${
+                symbolPerformance.successRate > 0.6 
+                  ? 'bg-trade-buy/10 text-trade-buy border-trade-buy/30' 
+                  : symbolPerformance.successRate > 0.4
+                    ? 'bg-muted/10 text-muted-foreground border-border'
+                    : 'bg-trade-sell/10 text-trade-sell border-trade-sell/30'
+                }`}>
+                {(symbolPerformance.successRate * 100).toFixed(1)}% success rate
+              </Badge>
+            )}
+          </CardHeader>
+          <CardContent>
+            {symbolPerformance ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium mb-2">Learning Statistics</h3>
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total Completed Trades</span>
+                      <span className="font-medium">{symbolPerformance.totalTrades}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Success Rate</span>
+                      <span className={`font-medium ${
+                        symbolPerformance.successRate > 0.6 ? 'text-trade-buy' : 
+                        symbolPerformance.successRate > 0.4 ? 'text-muted-foreground' : 'text-trade-sell'
+                      }`}>
+                        {(symbolPerformance.successRate * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total Profit/Loss</span>
+                      <span className={`font-medium ${
+                        symbolPerformance.profitLossTotal > 0 ? 'text-trade-buy' : 
+                        symbolPerformance.profitLossTotal < 0 ? 'text-trade-sell' : 'text-muted-foreground'
+                      }`}>
+                        ₹{symbolPerformance.profitLossTotal.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Confidence Adjustment</span>
+                      <span className={`font-medium ${
+                        symbolPerformance.adjustmentFactor > 1.05 ? 'text-trade-buy' : 
+                        symbolPerformance.adjustmentFactor < 0.95 ? 'text-trade-sell' : 'text-muted-foreground'
+                      }`}>
+                        ×{symbolPerformance.adjustmentFactor.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium mb-2">Performance Impact</h3>
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground text-sm">Confidence Adjustment</span>
+                      <div className="w-full bg-background rounded-full h-2.5">
+                        <div 
+                          className={`h-2.5 rounded-full ${
+                            symbolPerformance.adjustmentFactor > 1 ? 'bg-trade-buy' : 'bg-trade-sell'
+                          }`}
+                          style={{ width: `${Math.min(100, Math.max(0, symbolPerformance.adjustmentFactor * 50))}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-xs pt-1">
+                        <span>0.5×</span>
+                        <span className={symbolPerformance.adjustmentFactor > 1 ? 'text-trade-buy' : 'text-trade-sell'}>
+                          {symbolPerformance.adjustmentFactor.toFixed(2)}×
+                        </span>
+                        <span>1.5×</span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 text-xs text-muted-foreground">
+                      {symbolPerformance.totalTrades > 0 ? (
+                        symbolPerformance.successRate > 0.6 ? (
+                          <p>The AI has learned that its predictions for {selectedSymbol} are reliable and has increased confidence in its trading signals.</p>
+                        ) : symbolPerformance.successRate > 0.4 ? (
+                          <p>The AI is still learning the optimal trading patterns for {selectedSymbol} and making moderate adjustments to its strategy.</p>
+                        ) : (
+                          <p>The AI has detected that its predictions for {selectedSymbol} need refinement and is being more cautious with trading signals.</p>
+                        )
+                      ) : (
+                        <p>The AI has not yet gathered enough data for {selectedSymbol} to make significant learning adjustments.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">No performance data available yet for {selectedSymbol}</p>
+                <p className="text-xs text-muted-foreground mt-2">Performance metrics will appear after completing a few trades</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        
         {/* Chart with embedded prediction */}
         <Card className="border-border/50 bg-card/95 backdrop-blur">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -423,7 +543,7 @@ const Dashboard: React.FC = () => {
         
         {/* Tabs for orders and logs */}
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="grid grid-cols-2 max-w-[400px]">
+          <TabsList className="grid grid-cols-3 max-w-[600px]">
             <TabsTrigger value="orders" className="flex items-center gap-2">
               <History className="h-4 w-4" />
               <span>Trade History</span>
@@ -431,6 +551,10 @@ const Dashboard: React.FC = () => {
             <TabsTrigger value="logs" className="flex items-center gap-2">
               <Info className="h-4 w-4" />
               <span>System Logs</span>
+            </TabsTrigger>
+            <TabsTrigger value="learning" className="flex items-center gap-2">
+              <Brain className="h-4 w-4" />
+              <span>AI Learning</span>
             </TabsTrigger>
           </TabsList>
           
@@ -535,6 +659,50 @@ const Dashboard: React.FC = () => {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="learning">
+            <Card className="border-border/50 bg-card/95 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="text-lg">AI Learning Process</CardTitle>
+                <CardDescription>
+                  How the AI improves trading accuracy over time
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="border-l-2 border-muted-foreground/30 pl-4 pb-2">
+                    <h3 className="font-medium mb-2">Dynamic Strategy Optimization</h3>
+                    <p className="text-sm text-muted-foreground">
+                      The AI constantly monitors market volatility and trading patterns to optimize strategy parameters like SMA periods.
+                      In high volatility markets, it uses shorter periods for faster responses, while in stable markets, it uses longer periods to avoid false signals.
+                    </p>
+                  </div>
+                  
+                  <div className="border-l-2 border-muted-foreground/30 pl-4 pb-2">
+                    <h3 className="font-medium mb-2">Success-Based Confidence Adjustment</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Every trade outcome is recorded and analyzed to adjust the confidence levels of future predictions.
+                      Instruments with consistently successful predictions receive higher confidence scores, while those with poor performance are given lower confidence.
+                    </p>
+                  </div>
+                  
+                  <div className="border-l-2 border-muted-foreground/30 pl-4 pb-2">
+                    <h3 className="font-medium mb-2">Symbol-Specific Learning</h3>
+                    <p className="text-sm text-muted-foreground">
+                      The AI maintains separate learning models for each trading instrument, recognizing that different stocks and cryptocurrencies behave differently in various market conditions.
+                    </p>
+                  </div>
+                  
+                  <div className="bg-muted/50 p-4 rounded-md mt-2">
+                    <p className="text-xs text-muted-foreground">
+                      The learning system requires a minimum of 5 completed trades before making significant adjustments to the trading strategy.
+                      Performance metrics and adjustments are updated in real-time as new trade outcomes are recorded.
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

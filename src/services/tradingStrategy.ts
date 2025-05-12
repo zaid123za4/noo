@@ -1,4 +1,10 @@
 import zerodhaService, { MarketData, PredictionResult } from './zerodhaService';
+import { 
+  recordPrediction, 
+  recordOutcome, 
+  optimizeStrategyParameters,
+  getSymbolPerformance
+} from './tradingLearning';
 
 // Simple SMA calculation function
 function calculateSMA(data: MarketData[], period: number): number[] {
@@ -22,6 +28,9 @@ function calculateSMA(data: MarketData[], period: number): number[] {
 // Keep track of positions for each symbol
 const activePositions: Record<string, 'BUY' | 'SELL' | null> = {};
 
+// Keep track of position entry prices for P&L calculation
+const positionEntryPrices: Record<string, number> = {};
+
 // Trading strategy using SMA crossover with position holding
 export async function runTradingStrategy(
   symbol: string = 'NIFTY'
@@ -38,9 +47,12 @@ export async function runTradingStrategy(
       now
     );
     
-    // Calculate SMA 20 and SMA 50
-    const sma20 = calculateSMA(historicalData, 20);
-    const sma50 = calculateSMA(historicalData, 50);
+    // Optimize strategy parameters based on performance and market conditions
+    const { shortSMA, longSMA, confidenceMultiplier } = await optimizeStrategyParameters(symbol);
+    
+    // Calculate SMA with optimized parameters
+    const sma20 = calculateSMA(historicalData, shortSMA);
+    const sma50 = calculateSMA(historicalData, longSMA);
     
     // Get the latest values
     const latestSMA20 = sma20[sma20.length - 1];
@@ -65,12 +77,20 @@ export async function runTradingStrategy(
       if (currentPosition !== 'BUY') {
         action = 'BUY';
         confidence = 0.75 + (Math.random() * 0.2); // Random confidence between 0.75 and 0.95
-        message = 'SMA(20) crossed above SMA(50) - Golden Cross detected';
+        message = `SMA(${shortSMA}) crossed above SMA(${longSMA}) - Golden Cross detected`;
+        
+        // If we're in SELL position, record the outcome
+        if (currentPosition === 'SELL' && positionEntryPrices[symbol]) {
+          const successful = currentPrice < positionEntryPrices[symbol];
+          recordOutcome(symbol, 'SELL', positionEntryPrices[symbol], currentPrice, successful);
+        }
+        
         activePositions[symbol] = 'BUY'; // Update position tracker
+        positionEntryPrices[symbol] = currentPrice; // Record entry price
       } else {
         action = 'HOLD';
         confidence = 0.65 + (Math.random() * 0.2);
-        message = 'Already in BUY position - Continue holding as trend is still bullish';
+        message = `Already in BUY position - Continue holding as trend is still bullish`;
       }
     }
     // Death Cross (SMA20 crosses below SMA50) - Bearish signal
@@ -79,12 +99,20 @@ export async function runTradingStrategy(
       if (currentPosition !== 'SELL') {
         action = 'SELL';
         confidence = 0.70 + (Math.random() * 0.2); // Random confidence between 0.70 and 0.90
-        message = 'SMA(20) crossed below SMA(50) - Death Cross detected';
+        message = `SMA(${shortSMA}) crossed below SMA(${longSMA}) - Death Cross detected`;
+        
+        // If we're in BUY position, record the outcome
+        if (currentPosition === 'BUY' && positionEntryPrices[symbol]) {
+          const successful = currentPrice > positionEntryPrices[symbol];
+          recordOutcome(symbol, 'BUY', positionEntryPrices[symbol], currentPrice, successful);
+        }
+        
         activePositions[symbol] = 'SELL'; // Update position tracker
+        positionEntryPrices[symbol] = currentPrice; // Record entry price
       } else {
         action = 'HOLD';
         confidence = 0.65 + (Math.random() * 0.2);
-        message = 'Already in SELL position - Continue holding as trend is still bearish';
+        message = `Already in SELL position - Continue holding as trend is still bearish`;
       }
     }
     // No crossover, check trends
@@ -95,19 +123,28 @@ export async function runTradingStrategy(
           // We're in a SELL position but trend is turning bullish - close position
           action = 'BUY'; // Buy to close sell position
           confidence = 0.60 + (Math.random() * 0.15);
-          message = 'Closing SELL position as SMA(20) remains above SMA(50) - Bullish trend detected';
+          message = `Closing SELL position as SMA(${shortSMA}) remains above SMA(${longSMA}) - Bullish trend detected`;
+          
+          // Record the outcome
+          if (positionEntryPrices[symbol]) {
+            const successful = positionEntryPrices[symbol] > currentPrice;
+            recordOutcome(symbol, 'SELL', positionEntryPrices[symbol], currentPrice, successful);
+          }
+          
           activePositions[symbol] = 'BUY';
+          positionEntryPrices[symbol] = currentPrice;
         } else if (currentPosition !== 'BUY') {
           // Not in a position yet, enter BUY
           action = 'BUY';
           confidence = 0.55 + (Math.random() * 0.2);
-          message = 'SMA(20) remains above SMA(50) - Entering bullish trend';
+          message = `SMA(${shortSMA}) remains above SMA(${longSMA}) - Entering bullish trend`;
           activePositions[symbol] = 'BUY';
+          positionEntryPrices[symbol] = currentPrice;
         } else {
           // Already in BUY position
           action = 'HOLD';
           confidence = 0.60 + (Math.random() * 0.15);
-          message = 'SMA(20) remains above SMA(50) - Continue holding bullish position';
+          message = `SMA(${shortSMA}) remains above SMA(${longSMA}) - Continue holding bullish position`;
         }
       } else if (latestSMA20 < latestSMA50) {
         // Bearish trend continues
@@ -115,26 +152,56 @@ export async function runTradingStrategy(
           // We're in a BUY position but trend is turning bearish - close position
           action = 'SELL'; // Sell to close buy position
           confidence = 0.60 + (Math.random() * 0.15);
-          message = 'Closing BUY position as SMA(20) remains below SMA(50) - Bearish trend detected';
+          message = `Closing BUY position as SMA(${shortSMA}) remains below SMA(${longSMA}) - Bearish trend detected`;
+          
+          // Record the outcome
+          if (positionEntryPrices[symbol]) {
+            const successful = currentPrice > positionEntryPrices[symbol];
+            recordOutcome(symbol, 'BUY', positionEntryPrices[symbol], currentPrice, successful);
+          }
+          
           activePositions[symbol] = 'SELL';
+          positionEntryPrices[symbol] = currentPrice;
         } else if (currentPosition !== 'SELL') {
           // Not in a position yet, enter SELL
           action = 'SELL';
           confidence = 0.55 + (Math.random() * 0.2);
-          message = 'SMA(20) remains below SMA(50) - Entering bearish trend';
+          message = `SMA(${shortSMA}) remains below SMA(${longSMA}) - Entering bearish trend`;
           activePositions[symbol] = 'SELL';
+          positionEntryPrices[symbol] = currentPrice;
         } else {
           // Already in SELL position
           action = 'HOLD';
           confidence = 0.60 + (Math.random() * 0.15);
-          message = 'SMA(20) remains below SMA(50) - Continue holding bearish position';
+          message = `SMA(${shortSMA}) remains below SMA(${longSMA}) - Continue holding bearish position`;
         }
       } else {
         action = 'HOLD';
         confidence = 0.5;
-        message = 'SMA(20) and SMA(50) are nearly equal - No clear trend';
+        message = `SMA(${shortSMA}) and SMA(${longSMA}) are nearly equal - No clear trend`;
       }
     }
+    
+    // Apply the confidence multiplier from learning algorithm
+    confidence = Math.min(0.95, confidence * confidenceMultiplier);
+    
+    // Check performance data and add to message
+    const performance = getSymbolPerformance(symbol);
+    if (performance && performance.totalTrades > 0) {
+      const successRatePercent = (performance.successRate * 100).toFixed(1);
+      const profitLoss = performance.profitLossTotal.toFixed(2);
+      message += `. Learning: ${performance.totalTrades} trades, ${successRatePercent}% success rate, ₹${profitLoss} P/L`;
+    }
+    
+    // Record this prediction
+    const predictionResult: PredictionResult = {
+      action,
+      confidence,
+      timestamp: new Date(),
+      price: currentPrice,
+      message
+    };
+    recordPrediction(symbol, predictionResult);
     
     // Log the prediction
     zerodhaService.addLog(
@@ -142,13 +209,7 @@ export async function runTradingStrategy(
       'info'
     );
     
-    return {
-      action,
-      confidence,
-      timestamp: new Date(),
-      price: currentPrice,
-      message
-    };
+    return predictionResult;
   } catch (error) {
     zerodhaService.addLog(`Strategy error for ${symbol}: ${(error as Error).message}`, 'error');
     
