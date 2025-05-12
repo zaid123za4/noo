@@ -341,6 +341,7 @@ const Dashboard: React.FC = () => {
                 <InstrumentSelector
                   onSymbolSelect={setSelectedSymbol}
                   selectedSymbol={selectedSymbol}
+                  predictionData={latestPrediction}
                 />
               </div>
               
@@ -380,10 +381,21 @@ const Dashboard: React.FC = () => {
           </CardContent>
         </Card>
         
-        {/* Chart */}
+        {/* Chart with embedded prediction */}
         <Card className="border-border/50 bg-card/95 backdrop-blur">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">{selectedSymbol} Chart</CardTitle>
+            {latestPrediction && (
+              <Badge variant="outline" className={`${
+                latestPrediction.action === 'BUY' 
+                  ? 'bg-trade-buy/10 text-trade-buy border-trade-buy/30' 
+                  : latestPrediction.action === 'SELL'
+                    ? 'bg-trade-sell/10 text-trade-sell border-trade-sell/30'
+                    : 'bg-muted/10 text-muted-foreground border-border'
+                }`}>
+                {latestPrediction.action} signal • {(latestPrediction.confidence * 100).toFixed(1)}% confidence
+              </Badge>
+            )}
           </CardHeader>
           <CardContent className="h-[400px]">
             <div className="tradingview-widget-container w-full h-full">
@@ -392,11 +404,21 @@ const Dashboard: React.FC = () => {
                 title={`${selectedSymbol} Chart`}
                 className="w-full h-full"
                 frameBorder="0"
-                // Use lowercase for HTML attribute to avoid React warning
                 allowTransparency={true}
               />
             </div>
           </CardContent>
+          {latestPrediction && (
+            <CardFooter className={`px-4 py-2 text-xs ${
+              latestPrediction.action === 'BUY' 
+                ? 'text-trade-buy' 
+                : latestPrediction.action === 'SELL'
+                  ? 'text-trade-sell'
+                  : 'text-muted-foreground'
+              }`}>
+              {latestPrediction.message}
+            </CardFooter>
+          )}
         </Card>
         
         {/* Tabs for orders and logs */}

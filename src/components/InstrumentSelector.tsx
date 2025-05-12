@@ -12,13 +12,19 @@ import {
 } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
 import zerodhaService from '@/services/zerodhaService';
+import { PredictionResult } from '@/services/zerodhaService';
 
 interface InstrumentSelectorProps {
   onSymbolSelect: (symbol: string) => void;
   selectedSymbol: string;
+  predictionData?: PredictionResult | null;
 }
 
-const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({ onSymbolSelect, selectedSymbol }) => {
+const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({ 
+  onSymbolSelect, 
+  selectedSymbol,
+  predictionData 
+}) => {
   const [stocksList, setStocksList] = useState<string[]>([]);
   const [cryptosList, setCryptosList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,6 +97,17 @@ const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({ onSymbolSelect,
                 onClick={() => onSymbolSelect(instrument)}
               >
                 {instrument}
+                {predictionData && selectedSymbol === instrument && (
+                  <span className={`ml-2 px-2 py-0.5 text-xs rounded ${
+                    predictionData.action === 'BUY' 
+                      ? 'bg-trade-buy/20 text-trade-buy' 
+                      : predictionData.action === 'SELL'
+                        ? 'bg-trade-sell/20 text-trade-sell'
+                        : 'bg-muted/20 text-muted-foreground'
+                    }`}>
+                    {predictionData.action}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -98,6 +115,39 @@ const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({ onSymbolSelect,
           <div className="p-4 text-center text-muted-foreground">No instruments found</div>
         )}
       </div>
+
+      {selectedSymbol && predictionData && (
+        <div className={`p-4 rounded-md border ${
+          predictionData.action === 'BUY' 
+            ? 'bg-trade-buy/10 border-trade-buy/30' 
+            : predictionData.action === 'SELL'
+              ? 'bg-trade-sell/10 border-trade-sell/30'
+              : 'bg-muted/10 border-border'
+          }`}>
+          <div className="flex justify-between items-center mb-2">
+            <h4 className="font-medium">{selectedSymbol} Prediction</h4>
+            <span className={`px-2 py-0.5 text-xs rounded font-semibold ${
+              predictionData.action === 'BUY' 
+                ? 'bg-trade-buy/30 text-trade-buy' 
+                : predictionData.action === 'SELL'
+                  ? 'bg-trade-sell/30 text-trade-sell'
+                  : 'bg-muted/30 text-muted-foreground'
+              }`}>
+              {predictionData.action}
+            </span>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-1 text-sm">
+            <div className="text-muted-foreground">Confidence:</div>
+            <div className="text-right">{(predictionData.confidence * 100).toFixed(1)}%</div>
+            
+            <div className="text-muted-foreground">Price:</div>
+            <div className="text-right font-mono">₹{predictionData.price.toFixed(2)}</div>
+          </div>
+          
+          <p className="text-xs mt-2 text-muted-foreground">{predictionData.message}</p>
+        </div>
+      )}
     </div>
   );
 };
