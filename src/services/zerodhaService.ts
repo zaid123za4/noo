@@ -1,4 +1,3 @@
-
 // Mock service for Zerodha API interaction
 // In a real implementation, this would connect to the Zerodha API
 
@@ -220,7 +219,11 @@ class ZerodhaService {
     const orderId = `ORD${Math.floor(Math.random() * 100000)}`;
     
     // Get current price (simulated)
-    const currentPrice = 19500 + (Math.random() * 100) - 50;
+    const currentPrice = symbol === 'NIFTY' 
+      ? 19500 + (Math.random() * 100) - 50
+      : symbol.startsWith('CRYPTO_') 
+        ? 10 + (Math.random() * 50000)
+        : 500 + (Math.random() * 1000);
     
     // Create the order
     const order: Order = {
@@ -290,6 +293,24 @@ class ZerodhaService {
     this.isLoggedIn = false;
     this.accessToken = null;
     this.addLog('Logged out from Zerodha', 'info');
+  }
+  
+  // Get available symbols
+  async getAvailableSymbols(): Promise<{stocks: string[], cryptos: string[]}> {
+    // Mock data for available tradable instruments
+    return {
+      stocks: [
+        'NIFTY', 'BANKNIFTY', 'RELIANCE', 'TCS', 'HDFC', 'INFY', 
+        'ICICIBANK', 'SBIN', 'BHARTIARTL', 'HDFCBANK',
+        'WIPRO', 'AXISBANK', 'KOTAKBANK', 'ITC', 'LT', 'MARUTI',
+        'TATASTEEL', 'HINDUNILVR', 'BAJFINANCE', 'ASIANPAINT'
+      ],
+      cryptos: [
+        'CRYPTO_BTC', 'CRYPTO_ETH', 'CRYPTO_BNB', 'CRYPTO_SOL', 
+        'CRYPTO_XRP', 'CRYPTO_ADA', 'CRYPTO_DOGE', 'CRYPTO_DOT',
+        'CRYPTO_AVAX', 'CRYPTO_MATIC'
+      ]
+    };
   }
 }
 

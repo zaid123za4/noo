@@ -8,8 +8,9 @@ import { ArrowDown, ArrowUp, Clock, DollarSign, History, LineChart, Info, AlertT
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { autoTradeExecutor, runTradingStrategy } from '@/services/tradingStrategy';
+import { autoTradeExecutor, runTradingStrategy, runAllSymbolsStrategy } from '@/services/tradingStrategy';
 import { useNavigate } from 'react-router-dom';
+import InstrumentSelector from './InstrumentSelector';
 
 const Dashboard: React.FC = () => {
   const { toast } = useToast();
@@ -23,6 +24,9 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [autoTradeActive, setAutoTradeActive] = useState(false);
   const [autoTradeInterval, setAutoTradeIntervalState] = useState<NodeJS.Timeout | null>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState('NIFTY');
+  const [tradeQuantity, setTradeQuantity] = useState(1);
+  const [tradeAllSymbols, setTradeAllSymbols] = useState(false);
   
   // Check if user is logged in
   useEffect(() => {
@@ -43,6 +47,13 @@ const Dashboard: React.FC = () => {
     };
   }, [navigate]);
   
+  useEffect(() => {
+    // Reload prediction when selected symbol changes
+    if (selectedSymbol) {
+      loadPredictionForSymbol(selectedSymbol);
+    }
+  }, [selectedSymbol]);
+  
   const loadData = async () => {
     try {
       setLoading(true);
@@ -56,9 +67,9 @@ const Dashboard: React.FC = () => {
       setOrders(orderData);
       setLogs(logData);
       
-      // Run the trading strategy to get the latest prediction
-      const prediction = await runTradingStrategy();
-      setLatestPrediction(prediction);
+      if (selectedSymbol) {
+        await loadPredictionForSymbol(selectedSymbol);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -68,6 +79,21 @@ const Dashboard: React.FC = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const loadPredictionForSymbol = async (symbol: string) => {
+    try {
+      // Run the trading strategy to get the latest prediction
+      const prediction = await runTradingStrategy(symbol);
+      setLatestPrediction(prediction);
+    } catch (error) {
+      console.error(`Error getting prediction for ${symbol}:`, error);
+      toast({
+        title: 'Prediction Error',
+        description: `Failed to load prediction for ${symbol}`,
+        variant: 'destructive',
+      });
     }
   };
   
@@ -84,7 +110,11 @@ const Dashboard: React.FC = () => {
     } else {
       // Start auto trading
       const interval = setInterval(async () => {
-        await autoTradeExecutor();
+        if (tradeAllSymbols) {
+          await runAllSymbolsStrategy();
+        } else {
+          await autoTradeExecutor(selectedSymbol, tradeQuantity);
+        }
         loadData(); // Refresh data after each trading attempt
       }, 30000); // Run every 30 seconds
       
@@ -93,23 +123,29 @@ const Dashboard: React.FC = () => {
       
       toast({
         title: 'Auto Trading Started',
-        description: 'The system will check for trade signals every 30 seconds.',
+        description: tradeAllSymbols 
+          ? 'The system will check all symbols for trade signals every 30 seconds.'
+          : `The system will check ${selectedSymbol} for trade signals every 30 seconds.`,
       });
       
       // Run once immediately
-      autoTradeExecutor();
+      if (tradeAllSymbols) {
+        runAllSymbolsStrategy();
+      } else {
+        autoTradeExecutor(selectedSymbol, tradeQuantity);
+      }
     }
   };
   
   // Handle manual trade execution
   const executeManualTrade = async () => {
-    if (!latestPrediction) return;
+    if (!latestPrediction || latestPrediction.action === 'HOLD') return;
     
     try {
       await zerodhaService.placeOrder(
-        'NIFTY',
-        latestPrediction.action,
-        1, // quantity
+        selectedSymbol,
+        latestPrediction.action as 'BUY' | 'SELL', // We already checked it's not 'HOLD'
+        tradeQuantity,
         'MARKET'
       );
       
@@ -118,7 +154,7 @@ const Dashboard: React.FC = () => {
       
       toast({
         title: 'Trade Executed',
-        description: `${latestPrediction.action} order for NIFTY placed successfully.`,
+        description: `${latestPrediction.action} order for ${selectedSymbol} placed successfully.`,
       });
     } catch (error) {
       toast({
@@ -136,6 +172,20 @@ const Dashboard: React.FC = () => {
       currency: 'INR',
       maximumFractionDigits: 0,
     }).format(value);
+  };
+  
+  // Generate TradingView chart URL based on selected symbol
+  const getTradingViewUrl = (symbol: string): string => {
+    let exchange = 'NSE';
+    let tvSymbol = symbol;
+    
+    // Handle crypto symbols
+    if (symbol.startsWith('CRYPTO_')) {
+      exchange = 'BINANCE';
+      tvSymbol = symbol.replace('CRYPTO_', '') + 'USDT';
+    }
+    
+    return `https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=${exchange}%3A${tvSymbol}&interval=5&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=f1f3f6&studies=%5B%22MASimple%40tv-basicstudies%22%2C%22MASimple%40tv-basicstudies%22%5D&theme=dark&style=1&timezone=exchange&withdateranges=1&studies_overrides=%5B%7B%22id%22%3A%22MASimple%40tv-basicstudies%22%2C%22inputs%22%3A%7B%22length%22%3A20%2C%22color%22%3A%22rgb%2830%2C%20201%2C%20220%29%22%7D%7D%2C%7B%22id%22%3A%22MASimple%40tv-basicstudies_1%22%2C%22inputs%22%3A%7B%22length%22%3A50%2C%22color%22%3A%22rgb%28241%2C%20158%2C%2077%29%22%7D%7D%5D&utm_source=app.lovable.dev&utm_medium=widget&utm_campaign=chart`;
   };
   
   if (loading && !profile) {
@@ -233,6 +283,10 @@ const Dashboard: React.FC = () => {
               {latestPrediction ? (
                 <div className="space-y-2">
                   <div className="flex justify-between">
+                    <span className="text-muted-foreground">Symbol</span>
+                    <span className="font-mono font-bold">{selectedSymbol}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">Action</span>
                     <span className={`font-mono font-bold ${
                       latestPrediction.action === 'BUY' 
@@ -274,19 +328,72 @@ const Dashboard: React.FC = () => {
           </Card>
         </div>
         
+        {/* Instrument Selector and Settings */}
+        <Card className="border-border/50 bg-card/95 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="text-lg">Trading Settings</CardTitle>
+            <CardDescription>Select instrument and quantity</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-sm font-medium mb-2">Select Instrument</h3>
+                <InstrumentSelector
+                  onSymbolSelect={setSelectedSymbol}
+                  selectedSymbol={selectedSymbol}
+                />
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium mb-2">Trade Quantity</h3>
+                  <input
+                    type="number"
+                    min="1"
+                    value={tradeQuantity}
+                    onChange={(e) => setTradeQuantity(parseInt(e.target.value) || 1)}
+                    className="w-full p-2 rounded-md border border-input bg-background"
+                  />
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <input 
+                    type="checkbox" 
+                    id="tradeAll" 
+                    checked={tradeAllSymbols}
+                    onChange={(e) => setTradeAllSymbols(e.target.checked)}
+                    className="rounded border-input"
+                  />
+                  <label htmlFor="tradeAll">
+                    Trade all available instruments
+                  </label>
+                </div>
+                
+                <div className="bg-muted/50 p-3 rounded-md mt-4">
+                  <p className="text-xs text-muted-foreground">
+                    When auto-trading is enabled, real trades will be executed from your Zerodha account based on the strategy signals.
+                    Profits and losses will directly affect your actual Zerodha balance.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
         {/* Chart */}
         <Card className="border-border/50 bg-card/95 backdrop-blur">
           <CardHeader>
-            <CardTitle className="text-lg">NIFTY Chart</CardTitle>
+            <CardTitle className="text-lg">{selectedSymbol} Chart</CardTitle>
           </CardHeader>
           <CardContent className="h-[400px]">
             <div className="tradingview-widget-container w-full h-full">
               <iframe 
-                src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=NSE%3ANIFTY&interval=5&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=f1f3f6&studies=%5B%22MASimple%40tv-basicstudies%22%2C%22MASimple%40tv-basicstudies%22%5D&theme=dark&style=1&timezone=exchange&withdateranges=1&studies_overrides=%5B%7B%22id%22%3A%22MASimple%40tv-basicstudies%22%2C%22inputs%22%3A%7B%22length%22%3A20%2C%22color%22%3A%22rgb%2830%2C%20201%2C%20220%29%22%7D%7D%2C%7B%22id%22%3A%22MASimple%40tv-basicstudies_1%22%2C%22inputs%22%3A%7B%22length%22%3A50%2C%22color%22%3A%22rgb%28241%2C%20158%2C%2077%29%22%7D%7D%5D&utm_source=app.lovable.dev&utm_medium=widget&utm_campaign=chart"
-                title="NIFTY Chart"
+                src={getTradingViewUrl(selectedSymbol)}
+                title={`${selectedSymbol} Chart`}
                 className="w-full h-full"
                 frameBorder="0"
-                allowTransparency
+                // Use lowercase for HTML attribute to avoid React warning
+                allowTransparency={true}
               />
             </div>
           </CardContent>
@@ -413,7 +520,7 @@ const Dashboard: React.FC = () => {
         
         <div className="text-center py-4">
           <p className="text-xs text-muted-foreground">
-            Demo Mode • Zerodha Auto Trader • No real trades are executed
+            Live Trading Mode • Zerodha Auto Trader • Real trades will affect your Zerodha balance
           </p>
         </div>
       </div>

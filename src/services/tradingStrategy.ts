@@ -85,7 +85,7 @@ export async function runTradingStrategy(
     
     // Log the prediction
     zerodhaService.addLog(
-      `Strategy prediction: ${action} with ${(confidence * 100).toFixed(1)}% confidence. ${message}`,
+      `Strategy prediction for ${symbol}: ${action} with ${(confidence * 100).toFixed(1)}% confidence. ${message}`,
       'info'
     );
     
@@ -97,7 +97,7 @@ export async function runTradingStrategy(
       message
     };
   } catch (error) {
-    zerodhaService.addLog(`Strategy error: ${(error as Error).message}`, 'error');
+    zerodhaService.addLog(`Strategy error for ${symbol}: ${(error as Error).message}`, 'error');
     
     // Default to HOLD if there's an error
     return {
@@ -131,26 +131,44 @@ export async function autoTradeExecutor(
         // Place the order
         await zerodhaService.placeOrder(
           symbol,
-          prediction.action,
+          prediction.action as 'BUY' | 'SELL', // Type assertion needed since we've checked action !== 'HOLD'
           quantity,
           'MARKET'
         );
       } else {
         // Confidence is too low, manual approval needed
         zerodhaService.addLog(
-          `Decision: ${prediction.action} (confidence: ${(prediction.confidence * 100).toFixed(1)}%) - Manual approval needed`,
+          `Decision for ${symbol}: ${prediction.action} (confidence: ${(prediction.confidence * 100).toFixed(1)}%) - Manual approval needed`,
           'warning'
         );
       }
     } else {
       zerodhaService.addLog(
-        `No trade action required. ${prediction.message}`,
+        `No trade action required for ${symbol}. ${prediction.message}`,
         'info'
       );
     }
   } catch (error) {
     zerodhaService.addLog(
-      `Auto trade execution error: ${(error as Error).message}`,
+      `Auto trade execution error for ${symbol}: ${(error as Error).message}`,
+      'error'
+    );
+  }
+}
+
+// New function to run the strategy on all available symbols
+export async function runAllSymbolsStrategy(): Promise<void> {
+  try {
+    const { stocks, cryptos } = await zerodhaService.getAvailableSymbols();
+    const allSymbols = [...stocks, ...cryptos];
+    
+    // Run the strategy for each symbol
+    for (const symbol of allSymbols) {
+      await autoTradeExecutor(symbol);
+    }
+  } catch (error) {
+    zerodhaService.addLog(
+      `Error running all symbols strategy: ${(error as Error).message}`,
       'error'
     );
   }
