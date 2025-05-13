@@ -1,5 +1,6 @@
-// Mock service for Zerodha API interaction
-// In a real implementation, this would connect to the Zerodha API
+
+// Mock service for Dhan API interaction
+// In a real implementation, this would connect to the Dhan API
 
 import { toast } from "sonner";
 
@@ -52,7 +53,7 @@ export interface Order {
   type: 'BUY' | 'SELL';
   quantity: number;
   price: number;
-  status: 'COMPLETE' | 'REJECTED' | 'CANCELLED' | 'PENDING';
+  status: 'COMPLETE' | 'REJECTED' | 'CANCELLED' | 'PENDING' | 'ACTIVE';
   pnl?: number;
 }
 
@@ -70,22 +71,22 @@ interface TradeLog {
   type: 'info' | 'success' | 'error' | 'warning';
 }
 
-// Mock class for Zerodha API service
-class ZerodhaService {
+// Mock class for Dhan API service
+class DhanService {
   private isLoggedIn = false;
   private accessToken: string | null = null;
-  private apiKey = 'your_zerodha_api_key';
-  private apiSecret = 'your_zerodha_api_secret';
+  private apiKey = 'your_dhan_api_key';
+  private apiSecret = 'your_dhan_api_secret';
   private tradeLogs: TradeLog[] = [];
   private orders: Order[] = [];
   
   // Mock data for demonstration
   private mockProfile: UserProfile = {
-    user_id: 'AB1234',
+    user_id: 'DH1234',
     user_name: 'Demo User',
     email: 'demo@example.com',
     user_type: 'individual',
-    broker: 'ZERODHA',
+    broker: 'DHAN',
     exchanges: ['NSE', 'BSE', 'MCX'],
     products: ['CNC', 'NRML', 'MIS'],
     order_types: ['MARKET', 'LIMIT', 'SL', 'SL-M'],
@@ -113,22 +114,22 @@ class ZerodhaService {
     },
   };
   
-  // Login function - in a real app, this would redirect to Zerodha login
+  // Login function - in a real app, this would redirect to Dhan login
   async login(): Promise<string> {
-    // In a real app, this would redirect to the Zerodha OAuth page
-    return `https://kite.zerodha.com/connect/login?api_key=${this.apiKey}&v=3`;
+    // In a real app, this would redirect to the Dhan OAuth page
+    return `https://api.dhan.co/login?api_key=${this.apiKey}&v=1`;
   }
   
-  // Handle the callback from Zerodha OAuth
+  // Handle the callback from Dhan OAuth
   async handleCallback(requestToken: string): Promise<boolean> {
     try {
       // In a real implementation, this would exchange the request token for an access token
       this.accessToken = 'mock_access_token_' + Math.random().toString(36).substring(7);
       this.isLoggedIn = true;
-      this.addLog('Successfully logged in to Zerodha', 'success');
+      this.addLog('Successfully logged in to Dhan', 'success');
       return true;
     } catch (error) {
-      this.addLog('Failed to log in to Zerodha', 'error');
+      this.addLog('Failed to log in to Dhan', 'error');
       return false;
     }
   }
@@ -292,7 +293,7 @@ class ZerodhaService {
   logout(): void {
     this.isLoggedIn = false;
     this.accessToken = null;
-    this.addLog('Logged out from Zerodha', 'info');
+    this.addLog('Logged out from Dhan', 'info');
   }
   
   // Get available symbols
@@ -312,8 +313,18 @@ class ZerodhaService {
       ]
     };
   }
+  
+  // Get current price for a symbol
+  async getCurrentPrice(symbol: string): Promise<number> {
+    // Simulate getting the current price
+    return symbol === 'NIFTY' 
+      ? 19500 + (Math.random() * 100) - 50
+      : symbol.startsWith('CRYPTO_') 
+        ? 10 + (Math.random() * 50000)
+        : 500 + (Math.random() * 1000);
+  }
 }
 
 // Create a singleton instance
-const zerodhaService = new ZerodhaService();
-export default zerodhaService;
+const dhanService = new DhanService();
+export default dhanService;

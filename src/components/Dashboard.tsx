@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import zerodhaService, { UserProfile, Funds, Order, PredictionResult } from '@/services/zerodhaService';
+import dhanService, { UserProfile, Funds, Order, PredictionResult } from '@/services/zerodhaService';
 import { ArrowDown, ArrowUp, Clock, DollarSign, History, LineChart, Info, AlertTriangle, Brain, PauseCircle, StopCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,7 +55,7 @@ const Dashboard: React.FC = () => {
   
   // Check if user is logged in
   useEffect(() => {
-    if (!zerodhaService.isAuthenticated()) {
+    if (!dhanService.isAuthenticated()) {
       navigate('/');
       return;
     }
@@ -110,10 +110,10 @@ const Dashboard: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const profileData = await zerodhaService.getProfile();
-      const fundsData = await zerodhaService.getFunds();
-      const orderData = zerodhaService.getOrders();
-      const logData = zerodhaService.getLogs();
+      const profileData = await dhanService.getProfile();
+      const fundsData = await dhanService.getFunds();
+      const orderData = dhanService.getOrders();
+      const logData = dhanService.getLogs();
       
       setProfile(profileData);
       setFunds(fundsData);
@@ -206,7 +206,7 @@ const Dashboard: React.FC = () => {
     if (!latestPrediction || latestPrediction.action === 'HOLD') return;
     
     try {
-      await zerodhaService.placeOrder(
+      await dhanService.placeOrder(
         selectedSymbol,
         latestPrediction.action as 'BUY' | 'SELL',
         tradeQuantity,
@@ -296,9 +296,9 @@ const Dashboard: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Zerodha Auto Trader</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Dhan Auto Trader</h1>
             <p className="text-muted-foreground">
-              AI-powered trading system for Zerodha
+              AI-powered trading system for Dhan
             </p>
           </div>
           
@@ -878,7 +878,7 @@ const Dashboard: React.FC = () => {
         
         <div className="text-center py-4">
           <p className="text-xs text-muted-foreground">
-            {isAutoMode ? "AI Trading Mode" : "Manual Trading Mode"} • Zerodha Auto Trader • Real trades will affect your Zerodha balance
+            {isAutoMode ? "AI Trading Mode" : "Manual Trading Mode"} • Dhan Auto Trader • Real trades will affect your Dhan balance
           </p>
         </div>
       </div>

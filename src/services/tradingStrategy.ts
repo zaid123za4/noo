@@ -1,4 +1,5 @@
-import zerodhaService, { MarketData, PredictionResult } from './zerodhaService';
+
+import dhanService, { MarketData, PredictionResult } from './zerodhaService';
 import { 
   recordPrediction, 
   recordOutcome, 
@@ -40,7 +41,7 @@ export async function runTradingStrategy(
     const now = new Date();
     const threeDaysAgo = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000));
     
-    const historicalData = await zerodhaService.getHistoricalData(
+    const historicalData = await dhanService.getHistoricalData(
       symbol,
       '5minute',
       threeDaysAgo,
@@ -204,14 +205,14 @@ export async function runTradingStrategy(
     recordPrediction(symbol, predictionResult);
     
     // Log the prediction
-    zerodhaService.addLog(
+    dhanService.addLog(
       `Strategy prediction for ${symbol}: ${action} with ${(confidence * 100).toFixed(1)}% confidence. ${message}`,
       'info'
     );
     
     return predictionResult;
   } catch (error) {
-    zerodhaService.addLog(`Strategy error for ${symbol}: ${(error as Error).message}`, 'error');
+    dhanService.addLog(`Strategy error for ${symbol}: ${(error as Error).message}`, 'error');
     
     // Default to HOLD if there's an error
     return {
@@ -237,13 +238,13 @@ export async function autoTradeExecutor(
     if (prediction.action !== 'HOLD') {
       if (prediction.confidence >= 0.7) {
         // Confidence is high enough for automatic execution
-        zerodhaService.addLog(
+        dhanService.addLog(
           `Auto-executing ${prediction.action} order for ${quantity} ${symbol} @ ₹${prediction.price.toFixed(2)} (confidence: ${(prediction.confidence * 100).toFixed(1)}%)`,
           'info'
         );
         
         // Place the order
-        await zerodhaService.placeOrder(
+        await dhanService.placeOrder(
           symbol,
           prediction.action as 'BUY' | 'SELL', // Type assertion needed since we've checked action !== 'HOLD'
           quantity,
@@ -251,19 +252,19 @@ export async function autoTradeExecutor(
         );
       } else {
         // Confidence is too low, manual approval needed
-        zerodhaService.addLog(
+        dhanService.addLog(
           `Decision for ${symbol}: ${prediction.action} (confidence: ${(prediction.confidence * 100).toFixed(1)}%) - Manual approval needed`,
           'warning'
         );
       }
     } else {
-      zerodhaService.addLog(
+      dhanService.addLog(
         `No trade action required for ${symbol}. ${prediction.message}`,
         'info'
       );
     }
   } catch (error) {
-    zerodhaService.addLog(
+    dhanService.addLog(
       `Auto trade execution error for ${symbol}: ${(error as Error).message}`,
       'error'
     );
@@ -273,7 +274,7 @@ export async function autoTradeExecutor(
 // New function to run the strategy on all available symbols
 export async function runAllSymbolsStrategy(): Promise<void> {
   try {
-    const { stocks, cryptos } = await zerodhaService.getAvailableSymbols();
+    const { stocks, cryptos } = await dhanService.getAvailableSymbols();
     const allSymbols = [...stocks, ...cryptos];
     
     // Run the strategy for each symbol
@@ -281,7 +282,7 @@ export async function runAllSymbolsStrategy(): Promise<void> {
       await autoTradeExecutor(symbol);
     }
   } catch (error) {
-    zerodhaService.addLog(
+    dhanService.addLog(
       `Error running all symbols strategy: ${(error as Error).message}`,
       'error'
     );
@@ -300,13 +301,13 @@ export async function stopCurrentTrade(
     // If current position is SELL, we need to BUY to close it
     const closeAction = currentPosition === 'BUY' ? 'SELL' : 'BUY';
     
-    zerodhaService.addLog(
+    dhanService.addLog(
       `Manually closing ${currentPosition} position for ${symbol} with ${closeAction} order for ${quantity} units`,
       'info'
     );
     
     // Place the order to close the position
-    await zerodhaService.placeOrder(
+    await dhanService.placeOrder(
       symbol,
       closeAction,
       quantity,
@@ -316,7 +317,7 @@ export async function stopCurrentTrade(
     // Update our internal state
     if (activePositions[symbol] === currentPosition) {
       // Get the current price to calculate P&L
-      const currentPrice = await zerodhaService.getCurrentPrice(symbol);
+      const currentPrice = await dhanService.getCurrentPrice(symbol);
       
       // Record the outcome of this closed position for learning
       if (positionEntryPrices[symbol]) {
@@ -341,7 +342,7 @@ export async function stopCurrentTrade(
     
     return;
   } catch (error) {
-    zerodhaService.addLog(
+    dhanService.addLog(
       `Error closing position for ${symbol}: ${(error as Error).message}`,
       'error'
     );
