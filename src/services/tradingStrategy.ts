@@ -287,3 +287,64 @@ export async function runAllSymbolsStrategy(): Promise<void> {
     );
   }
 }
+
+// New function to stop/close a current trade position
+export async function stopCurrentTrade(
+  symbol: string,
+  currentPosition: 'BUY' | 'SELL',
+  quantity: number
+): Promise<void> {
+  try {
+    // To close a position, we need to do the opposite action
+    // If current position is BUY, we need to SELL to close it
+    // If current position is SELL, we need to BUY to close it
+    const closeAction = currentPosition === 'BUY' ? 'SELL' : 'BUY';
+    
+    zerodhaService.addLog(
+      `Manually closing ${currentPosition} position for ${symbol} with ${closeAction} order for ${quantity} units`,
+      'info'
+    );
+    
+    // Place the order to close the position
+    await zerodhaService.placeOrder(
+      symbol,
+      closeAction,
+      quantity,
+      'MARKET'
+    );
+    
+    // Update our internal state
+    if (activePositions[symbol] === currentPosition) {
+      // Get the current price to calculate P&L
+      const currentPrice = await zerodhaService.getCurrentPrice(symbol);
+      
+      // Record the outcome of this closed position for learning
+      if (positionEntryPrices[symbol]) {
+        const entryPrice = positionEntryPrices[symbol];
+        let successful = false;
+        
+        if (currentPosition === 'BUY') {
+          // For BUY positions, successful if selling price > buying price
+          successful = currentPrice > entryPrice;
+        } else {
+          // For SELL positions, successful if buying price < selling price
+          successful = currentPrice < entryPrice;
+        }
+        
+        recordOutcome(symbol, currentPosition, entryPrice, currentPrice, successful);
+      }
+      
+      // Reset position tracking
+      activePositions[symbol] = null;
+      delete positionEntryPrices[symbol];
+    }
+    
+    return;
+  } catch (error) {
+    zerodhaService.addLog(
+      `Error closing position for ${symbol}: ${(error as Error).message}`,
+      'error'
+    );
+    throw error;
+  }
+}

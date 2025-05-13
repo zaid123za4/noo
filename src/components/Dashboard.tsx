@@ -3,14 +3,15 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import zerodhaService, { UserProfile, Funds, Order, PredictionResult } from '@/services/zerodhaService';
-import { ArrowDown, ArrowUp, Clock, DollarSign, History, LineChart, Info, AlertTriangle, Brain } from 'lucide-react';
+import { ArrowDown, ArrowUp, Clock, DollarSign, History, LineChart, Info, AlertTriangle, Brain, PauseCircle, StopCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { autoTradeExecutor, runTradingStrategy, runAllSymbolsStrategy } from '@/services/tradingStrategy';
+import { autoTradeExecutor, runTradingStrategy, runAllSymbolsStrategy, stopCurrentTrade } from '@/services/tradingStrategy';
 import { useNavigate } from 'react-router-dom';
 import InstrumentSelector from './InstrumentSelector';
 import { getSymbolPerformance, getRecentPredictions } from '@/services/tradingLearning';
+import { useTradingMode } from '@/hooks/use-trading-mode';
 
 const Dashboard: React.FC = () => {
   const { toast } = useToast();
@@ -33,6 +34,24 @@ const Dashboard: React.FC = () => {
     profitLossTotal: number;
     adjustmentFactor: number;
   } | null>(null);
+  const [activeTrade, setActiveTrade] = useState<{
+    symbol: string;
+    position: 'BUY' | 'SELL';
+    entryPrice: number;
+    quantity: number;
+    timestamp: Date;
+  } | null>(null);
+  
+  const { mode: tradingMode, toggleTradingMode, isAutoMode, isManualMode } = useTradingMode({
+    symbol: selectedSymbol,
+    onModeChange: (mode) => {
+      if (mode === 'manual') {
+        stopAutoTrading();
+      } else {
+        startAutoTrading();
+      }
+    }
+  });
   
   // Check if user is logged in
   useEffect(() => {
@@ -67,6 +86,26 @@ const Dashboard: React.FC = () => {
       setSymbolPerformance(performance);
     }
   }, [selectedSymbol, logs]); // Re-run when logs update as they indicate new trades
+  
+  // Update active trade information based on orders
+  useEffect(() => {
+    // Find the most recent active order (if any)
+    const latestOrder = [...orders]
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .find(order => order.status === 'ACTIVE');
+    
+    if (latestOrder) {
+      setActiveTrade({
+        symbol: latestOrder.symbol,
+        position: latestOrder.type as 'BUY' | 'SELL',
+        entryPrice: latestOrder.price,
+        quantity: latestOrder.quantity,
+        timestamp: latestOrder.timestamp
+      });
+    } else {
+      setActiveTrade(null);
+    }
+  }, [orders]);
   
   const loadData = async () => {
     try {
@@ -111,43 +150,54 @@ const Dashboard: React.FC = () => {
     }
   };
   
+  const startAutoTrading = () => {
+    // Start auto trading
+    const interval = setInterval(async () => {
+      if (tradeAllSymbols) {
+        await runAllSymbolsStrategy();
+      } else {
+        await autoTradeExecutor(selectedSymbol, tradeQuantity);
+      }
+      loadData(); // Refresh data after each trading attempt
+    }, 30000); // Run every 30 seconds
+    
+    setAutoTradeIntervalState(interval);
+    setAutoTradeActive(true);
+    
+    toast({
+      title: 'Auto Trading Started',
+      description: tradeAllSymbols 
+        ? 'The system will check all symbols for trade signals every 30 seconds.'
+        : `The system will check ${selectedSymbol} for trade signals every 30 seconds.`,
+    });
+    
+    // Run once immediately
+    if (tradeAllSymbols) {
+      runAllSymbolsStrategy();
+    } else {
+      autoTradeExecutor(selectedSymbol, tradeQuantity);
+    }
+  };
+  
+  const stopAutoTrading = () => {
+    // Stop auto trading
+    if (autoTradeInterval) clearInterval(autoTradeInterval);
+    setAutoTradeIntervalState(null);
+    setAutoTradeActive(false);
+    
+    toast({
+      title: 'Auto Trading Stopped',
+      description: 'The auto trading system is now paused. Current positions are maintained.',
+    });
+  };
+  
   const toggleAutoTrade = () => {
     if (autoTradeActive) {
-      // Stop auto trading
-      if (autoTradeInterval) clearInterval(autoTradeInterval);
-      setAutoTradeIntervalState(null);
-      setAutoTradeActive(false);
-      toast({
-        title: 'Auto Trading Stopped',
-        description: 'The auto trading system is now paused.',
-      });
+      stopAutoTrading();
+      toggleTradingMode(); // Switch to manual mode
     } else {
-      // Start auto trading
-      const interval = setInterval(async () => {
-        if (tradeAllSymbols) {
-          await runAllSymbolsStrategy();
-        } else {
-          await autoTradeExecutor(selectedSymbol, tradeQuantity);
-        }
-        loadData(); // Refresh data after each trading attempt
-      }, 30000); // Run every 30 seconds
-      
-      setAutoTradeIntervalState(interval);
-      setAutoTradeActive(true);
-      
-      toast({
-        title: 'Auto Trading Started',
-        description: tradeAllSymbols 
-          ? 'The system will check all symbols for trade signals every 30 seconds.'
-          : `The system will check ${selectedSymbol} for trade signals every 30 seconds.`,
-      });
-      
-      // Run once immediately
-      if (tradeAllSymbols) {
-        runAllSymbolsStrategy();
-      } else {
-        autoTradeExecutor(selectedSymbol, tradeQuantity);
-      }
+      startAutoTrading();
+      toggleTradingMode(); // Switch to auto mode
     }
   };
   
@@ -158,7 +208,7 @@ const Dashboard: React.FC = () => {
     try {
       await zerodhaService.placeOrder(
         selectedSymbol,
-        latestPrediction.action as 'BUY' | 'SELL', // We already checked it's not 'HOLD'
+        latestPrediction.action as 'BUY' | 'SELL',
         tradeQuantity,
         'MARKET'
       );
@@ -174,6 +224,34 @@ const Dashboard: React.FC = () => {
       toast({
         title: 'Trade Failed',
         description: `Failed to place ${latestPrediction.action} order: ${(error as Error).message}`,
+        variant: 'destructive',
+      });
+    }
+  };
+  
+  // New function to stop current trade
+  const handleStopCurrentTrade = async () => {
+    if (!activeTrade) return;
+    
+    try {
+      // Call the stopCurrentTrade function with the active trade details
+      await stopCurrentTrade(
+        activeTrade.symbol,
+        activeTrade.position,
+        activeTrade.quantity
+      );
+      
+      toast({
+        title: 'Trade Closed',
+        description: `${activeTrade.position === 'BUY' ? 'Sell' : 'Buy'} order placed to close position for ${activeTrade.symbol}.`,
+      });
+      
+      // Refresh data
+      loadData();
+    } catch (error) {
+      toast({
+        title: 'Failed to Close Trade',
+        description: `Error: ${(error as Error).message}`,
         variant: 'destructive',
       });
     }
@@ -231,11 +309,85 @@ const Dashboard: React.FC = () => {
             >
               {autoTradeActive ? 'Stop Auto Trading' : 'Start Auto Trading'}
             </Button>
+            {activeTrade && (
+              <Button 
+                variant="outline" 
+                onClick={handleStopCurrentTrade}
+                className="flex gap-2 items-center"
+              >
+                <StopCircle className="h-4 w-4" />
+                Close Current Position
+              </Button>
+            )}
             <Button variant="outline" onClick={() => navigate('/')}>
               Logout
             </Button>
           </div>
         </div>
+        
+        {/* Active Trade Card (new) */}
+        {activeTrade && (
+          <Card className="border-border/50 bg-card/95 backdrop-blur">
+            <CardHeader className="flex flex-row items-center justify-between py-4">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Active Position
+              </CardTitle>
+              <Badge variant="outline" className={`${
+                activeTrade.position === 'BUY' 
+                  ? 'bg-trade-buy/10 text-trade-buy border-trade-buy/30' 
+                  : 'bg-trade-sell/10 text-trade-sell border-trade-sell/30'
+              }`}>
+                {activeTrade.position}
+              </Badge>
+            </CardHeader>
+            <CardContent className="py-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Symbol</div>
+                  <div className="font-mono font-bold">{activeTrade.symbol}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Entry Price</div>
+                  <div className="font-mono">₹{activeTrade.entryPrice.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Quantity</div>
+                  <div className="font-mono">{activeTrade.quantity}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Total Value</div>
+                  <div className="font-mono font-semibold">{formatCurrency(activeTrade.entryPrice * activeTrade.quantity)}</div>
+                </div>
+              </div>
+              <div className="flex justify-end mt-4">
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="flex items-center gap-1"
+                    onClick={handleStopCurrentTrade}
+                  >
+                    <StopCircle className="h-4 w-4" />
+                    <span>Close Position</span>
+                  </Button>
+                  <Badge variant={tradingMode === 'auto' ? 'default' : 'outline'} className="flex items-center gap-1">
+                    {tradingMode === 'auto' ? (
+                      <>
+                        <span>AI Trading</span>
+                        <PauseCircle className="h-3 w-3" />
+                      </>
+                    ) : (
+                      <>
+                        <span>Manual Mode</span>
+                      </>
+                    )}
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         
         {/* User profile and funds */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -378,16 +530,32 @@ const Dashboard: React.FC = () => {
                     checked={tradeAllSymbols}
                     onChange={(e) => setTradeAllSymbols(e.target.checked)}
                     className="rounded border-input"
+                    disabled={isAutoMode}
                   />
-                  <label htmlFor="tradeAll">
+                  <label htmlFor="tradeAll" className={isAutoMode ? "text-muted-foreground" : ""}>
                     Trade all available instruments
                   </label>
                 </div>
                 
+                <div className="flex items-center justify-between mt-4">
+                  <Badge variant={isManualMode ? "outline" : "default"} className="flex items-center gap-1">
+                    {isManualMode ? "Manual Trading" : "AI Trading"}
+                  </Badge>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => toggleTradingMode()}
+                    className="flex items-center gap-1"
+                  >
+                    {isManualMode ? "Enable AI Trading" : "Switch to Manual"}
+                  </Button>
+                </div>
+                
                 <div className="bg-muted/50 p-3 rounded-md mt-4">
                   <p className="text-xs text-muted-foreground">
-                    When auto-trading is enabled, real trades will be executed from your Zerodha account based on the strategy signals.
-                    Profits and losses will directly affect your actual Zerodha balance.
+                    {isAutoMode
+                      ? "AI Trading is active. The system will automatically place trades based on signals. Current trades will continue until completion or manual closure."
+                      : "Manual Trading is active. You control when to execute trades, but can still view AI predictions."}
                   </p>
                 </div>
               </div>
@@ -710,7 +878,7 @@ const Dashboard: React.FC = () => {
         
         <div className="text-center py-4">
           <p className="text-xs text-muted-foreground">
-            Live Trading Mode • Zerodha Auto Trader • Real trades will affect your Zerodha balance
+            {isAutoMode ? "AI Trading Mode" : "Manual Trading Mode"} • Zerodha Auto Trader • Real trades will affect your Zerodha balance
           </p>
         </div>
       </div>
