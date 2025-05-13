@@ -1,8 +1,8 @@
 
-// Mock service for Dhan API interaction
+// Dhan API Service
 // In a real implementation, this would connect to the Dhan API
 
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
 
 export interface UserProfile {
   user_id: string;
@@ -71,12 +71,12 @@ interface TradeLog {
   type: 'info' | 'success' | 'error' | 'warning';
 }
 
-// Mock class for Dhan API service
+// Dhan Service for API interaction
 class DhanService {
   private isLoggedIn = false;
   private accessToken: string | null = null;
-  private apiKey = 'your_dhan_api_key';
-  private apiSecret = 'your_dhan_api_secret';
+  private apiKey: string = '';
+  private apiSecret: string = '';
   private tradeLogs: TradeLog[] = [];
   private orders: Order[] = [];
   
@@ -113,10 +113,38 @@ class DhanService {
       },
     },
   };
+
+  // Set user credentials
+  setCredentials(apiKey: string, apiSecret: string): void {
+    this.apiKey = apiKey;
+    this.apiSecret = apiSecret;
+    localStorage.setItem('dhan_api_key', apiKey);
+    localStorage.setItem('dhan_api_secret', apiSecret);
+  }
+  
+  // Check for stored credentials
+  loadStoredCredentials(): boolean {
+    const storedApiKey = localStorage.getItem('dhan_api_key');
+    const storedApiSecret = localStorage.getItem('dhan_api_secret');
+    
+    if (storedApiKey && storedApiSecret) {
+      this.apiKey = storedApiKey;
+      this.apiSecret = storedApiSecret;
+      return true;
+    }
+    
+    return false;
+  }
   
   // Login function - in a real app, this would redirect to Dhan login
   async login(): Promise<string> {
+    if (!this.apiKey || !this.apiSecret) {
+      throw new Error('API credentials not set');
+    }
+    
     // In a real app, this would redirect to the Dhan OAuth page
+    // or use the API credentials to authenticate
+    this.addLog('Initiating Dhan login process', 'info');
     return `https://api.dhan.co/login?api_key=${this.apiKey}&v=1`;
   }
   
@@ -127,6 +155,11 @@ class DhanService {
       this.accessToken = 'mock_access_token_' + Math.random().toString(36).substring(7);
       this.isLoggedIn = true;
       this.addLog('Successfully logged in to Dhan', 'success');
+      
+      // Fetch initial user data after successful login
+      await this.getProfile();
+      await this.getFunds();
+      
       return true;
     } catch (error) {
       this.addLog('Failed to log in to Dhan', 'error');
@@ -142,8 +175,21 @@ class DhanService {
   // Get user profile
   async getProfile(): Promise<UserProfile> {
     if (!this.isLoggedIn) {
-      throw new Error('Not logged in');
+      // Try to load credentials and auto-login
+      if (this.loadStoredCredentials()) {
+        try {
+          await this.login();
+          await this.handleCallback('auto_login_token');
+        } catch (error) {
+          throw new Error('Not logged in');
+        }
+      } else {
+        throw new Error('Not logged in');
+      }
     }
+    
+    // In a real app, this would fetch profile from Dhan API
+    this.addLog('Fetched user profile', 'info');
     return this.mockProfile;
   }
   
@@ -153,6 +199,7 @@ class DhanService {
       throw new Error('Not logged in');
     }
     
+    // In a real app, this would fetch funds from Dhan API
     // Simulate some random market movements
     const randomChange = (Math.random() * 1000) - 500;
     this.mockFunds.equity.available.cash += randomChange;
@@ -160,6 +207,7 @@ class DhanService {
     // Sometimes show unrealized profit/loss
     this.mockFunds.equity.utilized.m2m_unrealised = randomChange;
     
+    this.addLog('Fetched user funds', 'info');
     return this.mockFunds;
   }
   
@@ -201,6 +249,7 @@ class DhanService {
       lastClose = close;
     }
     
+    this.addLog(`Fetched historical data for ${symbol}`, 'info');
     return data;
   }
   
@@ -255,9 +304,16 @@ class DhanService {
       } else {
         this.mockFunds.equity.available.cash += orderValue;
       }
-      toast.success(`Order ${order.id} executed successfully`);
+      toast({
+        title: "Order Executed",
+        description: `${order.id} executed successfully`,
+      });
     } else {
-      toast.error(`Order ${order.id} was rejected`);
+      toast({
+        variant: "destructive",
+        title: "Order Rejected",
+        description: `${order.id} was rejected`,
+      });
     }
     
     return order;
@@ -293,6 +349,10 @@ class DhanService {
   logout(): void {
     this.isLoggedIn = false;
     this.accessToken = null;
+    this.apiKey = '';
+    this.apiSecret = '';
+    localStorage.removeItem('dhan_api_key');
+    localStorage.removeItem('dhan_api_secret');
     this.addLog('Logged out from Dhan', 'info');
   }
   
