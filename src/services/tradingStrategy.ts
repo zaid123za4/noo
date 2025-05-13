@@ -1,5 +1,5 @@
 
-import dhanService, { MarketData, PredictionResult } from './zerodhaService';
+import dhanService, { MarketData, PredictionResult } from '@/services/dhanService';
 import { 
   recordPrediction, 
   recordOutcome, 

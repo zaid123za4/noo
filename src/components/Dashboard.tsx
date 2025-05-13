@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import dhanService, { UserProfile, Funds, Order, PredictionResult } from '@/services/zerodhaService';
+import dhanService, { UserProfile, Funds, Order, PredictionResult } from '@/services/dhanService';
 import { ArrowDown, ArrowUp, Clock, DollarSign, History, LineChart, Info, AlertTriangle, Brain, PauseCircle, StopCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

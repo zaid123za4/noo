@@ -1,5 +1,4 @@
-
-import zerodhaService, { MarketData, PredictionResult } from './zerodhaService';
+import dhanService, { MarketData, PredictionResult } from '@/services/dhanService';
 
 // Interface for storing prediction history
 interface PredictionHistory {
@@ -112,7 +111,7 @@ export function recordOutcome(
     // Adjust the performance factor based on recent outcomes
     updateAdjustmentFactor(symbol);
 
-    zerodhaService.addLog(
+    dhanService.addLog(
       `Learning: ${symbol} ${action} prediction ${successful ? 'succeeded' : 'failed'} with P/L of ₹${profitLoss.toFixed(2)}. New adjustment factor: ${symbolPerformance[symbol].adjustmentFactor.toFixed(2)}`, 
       successful ? 'success' : 'warning'
     );
@@ -216,7 +215,7 @@ export async function optimizeStrategyParameters(
     const now = new Date();
     const fiveDaysAgo = new Date(now.getTime() - (5 * 24 * 60 * 60 * 1000)); 
     
-    const historicalData = await zerodhaService.getHistoricalData(
+    const historicalData = await dhanService.getHistoricalData(
       symbol,
       '15minute', // Using 15-minute candles for optimization
       fiveDaysAgo,
@@ -241,12 +240,12 @@ export async function optimizeStrategyParameters(
     confidenceMultiplier *= getConfidenceAdjustment(symbol);
     
     // Log the optimization
-    zerodhaService.addLog(
+    dhanService.addLog(
       `Optimized strategy for ${symbol}: SMA(${shortSMA}/${longSMA}), confidence x${confidenceMultiplier.toFixed(2)}. Volatility: ${(volatility * 100).toFixed(2)}%`,
       'info'
     );
   } catch (error) {
-    zerodhaService.addLog(
+    dhanService.addLog(
       `Failed to optimize strategy for ${symbol}: ${(error as Error).message}`,
       'error'
     );

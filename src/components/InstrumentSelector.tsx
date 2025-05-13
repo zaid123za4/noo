@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import zerodhaService from '@/services/zerodhaService';
-import { PredictionResult } from '@/services/zerodhaService';
+import dhanService from '@/services/dhanService';
+import { PredictionResult } from '@/services/dhanService';
 import { getSymbolPerformance } from '@/services/tradingLearning';
 
 interface InstrumentSelectorProps {
@@ -40,7 +40,7 @@ const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({
     const fetchInstruments = async () => {
       try {
         setLoading(true);
-        const { stocks, cryptos } = await zerodhaService.getAvailableSymbols();
+        const { stocks, cryptos } = await dhanService.getAvailableSymbols();
         setStocksList(stocks);
         setCryptosList(cryptos);
         
