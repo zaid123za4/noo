@@ -1,4 +1,3 @@
-
 import dhanService, { MarketData, PredictionResult } from '@/services/dhanService';
 import { 
   recordPrediction, 
@@ -398,7 +397,7 @@ export async function executeManualTrade(
 ): Promise<boolean> {
   try {
     // Check if market is open for non-crypto assets
-    if (!isCrypto(symbol) && !isMarketOpen() && action !== 'HOLD') {
+    if (!isCrypto(symbol) && !isMarketOpen() && action !== 'BUY' && action !== 'SELL') {
       dhanService.addLog(
         `Cannot execute manual ${action} order for ${symbol} - Market is closed.`,
         'warning'

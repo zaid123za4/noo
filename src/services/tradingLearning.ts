@@ -1,4 +1,3 @@
-
 import dhanService, { MarketData, PredictionResult } from '@/services/dhanService';
 
 // Interface for storing prediction history

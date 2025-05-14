@@ -61,6 +61,7 @@ export interface PredictionResult {
   timestamp: Date;
   price: number;
   message: string;
+  signalStrength?: number; // Add this property
 }
 
 interface TradeLog {
