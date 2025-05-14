@@ -6,6 +6,7 @@ import { AlertCircle, LogIn } from 'lucide-react';
 import dhanService from '@/services/dhanService';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/components/ui/use-toast';
+import AdminLogin from '@/components/AdminLogin';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -95,6 +96,19 @@ const LoginPage: React.FC = () => {
             {isLoading ? "Connecting..." : "Login with Dhan"}
             {!isLoading && <LogIn className="ml-2 h-4 w-4" />}
           </Button>
+          
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or</span>
+            </div>
+          </div>
+          
+          <div className="flex justify-center">
+            <AdminLogin />
+          </div>
         </CardContent>
       </Card>
     </div>
