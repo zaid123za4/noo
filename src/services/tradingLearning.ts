@@ -1,3 +1,4 @@
+
 import dhanService, { MarketData, PredictionResult } from '@/services/dhanService';
 
 // Interface for storing prediction history
@@ -7,6 +8,7 @@ interface PredictionHistory {
   action: 'BUY' | 'SELL' | 'HOLD';
   confidence: number;
   price: number;
+  signalStrength?: number;
   outcome?: {
     successful: boolean;
     profitLoss: number;
@@ -44,7 +46,8 @@ export function recordPrediction(
     symbol,
     action: prediction.action,
     confidence: prediction.confidence,
-    price: prediction.price
+    price: prediction.price,
+    signalStrength: prediction.signalStrength
   });
 
   // Limit history to last 100 predictions
@@ -274,4 +277,64 @@ function calculateVolatility(data: MarketData[]): number {
   const avgSquareDiff = squareDiffs.reduce((sum, val) => sum + val, 0) / squareDiffs.length;
   
   return Math.sqrt(avgSquareDiff);
+}
+
+// New function to analyze patterns for improved predictions
+export async function analyzePatterns(symbol: string): Promise<{
+  patternType: 'uptrend' | 'downtrend' | 'range' | 'unknown';
+  strength: number; // 0-100
+  recommendation: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
+}> {
+  try {
+    // Get recent market data
+    const now = new Date();
+    const tenDaysAgo = new Date(now.getTime() - (10 * 24 * 60 * 60 * 1000));
+    
+    const historicalData = await dhanService.getHistoricalData(
+      symbol,
+      'day',
+      tenDaysAgo,
+      now
+    );
+    
+    // Simple pattern detection (in a real system, this would be much more sophisticated)
+    const closes = historicalData.map(d => d.close);
+    
+    // Calculate simple trend
+    let upCount = 0;
+    let downCount = 0;
+    
+    for (let i = 1; i < closes.length; i++) {
+      if (closes[i] > closes[i-1]) upCount++;
+      else if (closes[i] < closes[i-1]) downCount++;
+    }
+    
+    // Determine pattern type
+    let patternType: 'uptrend' | 'downtrend' | 'range' | 'unknown' = 'unknown';
+    let strength = 50;
+    let recommendation: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell' = 'neutral';
+    
+    if (upCount > downCount * 2) {
+      patternType = 'uptrend';
+      strength = Math.min(100, 50 + (upCount - downCount) * 5);
+      recommendation = strength > 80 ? 'strong_buy' : 'buy';
+    } else if (downCount > upCount * 2) {
+      patternType = 'downtrend';
+      strength = Math.max(0, 50 - (downCount - upCount) * 5);
+      recommendation = strength < 20 ? 'strong_sell' : 'sell';
+    } else if (Math.abs(upCount - downCount) <= 2) {
+      patternType = 'range';
+      strength = 50;
+      recommendation = 'neutral';
+    }
+    
+    return { patternType, strength, recommendation };
+    
+  } catch (error) {
+    dhanService.addLog(
+      `Failed to analyze patterns for ${symbol}: ${(error as Error).message}`,
+      'error'
+    );
+    return { patternType: 'unknown', strength: 50, recommendation: 'neutral' };
+  }
 }

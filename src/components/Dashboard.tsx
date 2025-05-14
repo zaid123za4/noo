@@ -1,13 +1,23 @@
+
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import dhanService, { UserProfile, Funds, Order, PredictionResult } from '@/services/dhanService';
-import { ArrowDown, ArrowUp, Clock, DollarSign, History, LineChart, Info, AlertTriangle, Brain, PauseCircle, StopCircle } from 'lucide-react';
+import { ArrowDown, ArrowUp, Clock, History, Info, AlertTriangle, Brain, PauseCircle, StopCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { autoTradeExecutor, runTradingStrategy, runAllSymbolsStrategy, stopCurrentTrade } from '@/services/tradingStrategy';
+import { 
+  autoTradeExecutor, 
+  runTradingStrategy, 
+  runAllSymbolsStrategy, 
+  stopCurrentTrade,
+  executeManualTrade,
+  getSignalStrength,
+  getCurrentPosition,
+  getChartProvider
+} from '@/services/tradingStrategy';
 import { useNavigate } from 'react-router-dom';
 import InstrumentSelector from './InstrumentSelector';
 import { getSymbolPerformance, getRecentPredictions } from '@/services/tradingLearning';
@@ -41,6 +51,9 @@ const Dashboard: React.FC = () => {
     quantity: number;
     timestamp: Date;
   } | null>(null);
+  const [signalStrength, setSignalStrength] = useState<number>(50);
+  const [chartProvider, setChartProvider] = useState<string>('NSE');
+  const [showMarketClosedWarning, setShowMarketClosedWarning] = useState<boolean>(false);
   
   const { mode: tradingMode, toggleTradingMode, isAutoMode, isManualMode } = useTradingMode({
     symbol: selectedSymbol,
@@ -76,6 +89,8 @@ const Dashboard: React.FC = () => {
     // Reload prediction when selected symbol changes
     if (selectedSymbol) {
       loadPredictionForSymbol(selectedSymbol);
+      // Update chart provider based on symbol
+      setChartProvider(getChartProvider(selectedSymbol));
     }
   }, [selectedSymbol]);
   
@@ -84,6 +99,26 @@ const Dashboard: React.FC = () => {
     if (selectedSymbol) {
       const performance = getSymbolPerformance(selectedSymbol);
       setSymbolPerformance(performance);
+      
+      // Get the current signal strength
+      const currentSignalStrength = getSignalStrength(selectedSymbol);
+      setSignalStrength(currentSignalStrength);
+      
+      // Check current position
+      const currentPosition = getCurrentPosition(selectedSymbol);
+      if (currentPosition) {
+        // We have an active position for this symbol
+        // In a real system, we would fetch more details here
+        setActiveTrade({
+          symbol: selectedSymbol,
+          position: currentPosition,
+          entryPrice: 0, // This would be fetched from the service
+          quantity: tradeQuantity,
+          timestamp: new Date()
+        });
+      } else {
+        setActiveTrade(null);
+      }
     }
   }, [selectedSymbol, logs]); // Re-run when logs update as they indicate new trades
   
@@ -102,10 +137,10 @@ const Dashboard: React.FC = () => {
         quantity: latestOrder.quantity,
         timestamp: latestOrder.timestamp
       });
-    } else {
+    } else if (!getCurrentPosition(selectedSymbol)) {
       setActiveTrade(null);
     }
-  }, [orders]);
+  }, [orders, selectedSymbol]);
   
   const loadData = async () => {
     try {
@@ -123,6 +158,20 @@ const Dashboard: React.FC = () => {
       if (selectedSymbol) {
         await loadPredictionForSymbol(selectedSymbol);
       }
+      
+      // Check if market is currently open
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      const day = now.getDay();
+      
+      // Weekend check (0 is Sunday, 6 is Saturday)
+      const isWeekend = day === 0 || day === 6;
+      
+      // Indian market hours (9:15 AM to 3:30 PM)
+      const isMarketHours = (hours > 9 || (hours === 9 && minutes >= 15)) && (hours < 15 || (hours === 15 && minutes <= 30));
+      
+      setShowMarketClosedWarning(!isMarketHours || isWeekend);
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -140,6 +189,11 @@ const Dashboard: React.FC = () => {
       // Run the trading strategy to get the latest prediction
       const prediction = await runTradingStrategy(symbol);
       setLatestPrediction(prediction);
+      
+      // Update signal strength
+      if (prediction.signalStrength !== undefined) {
+        setSignalStrength(prediction.signalStrength);
+      }
     } catch (error) {
       console.error(`Error getting prediction for ${symbol}:`, error);
       toast({
@@ -202,28 +256,33 @@ const Dashboard: React.FC = () => {
   };
   
   // Handle manual trade execution
-  const executeManualTrade = async () => {
-    if (!latestPrediction || latestPrediction.action === 'HOLD') return;
-    
+  const handleManualTradeExecution = async (action: 'BUY' | 'SELL') => {
     try {
-      await dhanService.placeOrder(
+      const success = await executeManualTrade(
         selectedSymbol,
-        latestPrediction.action as 'BUY' | 'SELL',
-        tradeQuantity,
-        'MARKET'
+        action,
+        tradeQuantity
       );
       
-      // Refresh data
-      loadData();
-      
-      toast({
-        title: 'Trade Executed',
-        description: `${latestPrediction.action} order for ${selectedSymbol} placed successfully.`,
-      });
+      if (success) {
+        // Refresh data
+        loadData();
+        
+        toast({
+          title: 'Trade Executed',
+          description: `${action} order for ${selectedSymbol} placed successfully.`,
+        });
+      } else {
+        toast({
+          title: 'Trade Failed',
+          description: `Failed to place ${action} order. Check if market is open.`,
+          variant: 'destructive',
+        });
+      }
     } catch (error) {
       toast({
         title: 'Trade Failed',
-        description: `Failed to place ${latestPrediction.action} order: ${(error as Error).message}`,
+        description: `Failed to place ${action} order: ${(error as Error).message}`,
         variant: 'destructive',
       });
     }
@@ -268,13 +327,16 @@ const Dashboard: React.FC = () => {
   
   // Generate TradingView chart URL based on selected symbol
   const getTradingViewUrl = (symbol: string): string => {
-    let exchange = 'NSE';
+    let exchange = chartProvider;
     let tvSymbol = symbol;
     
     // Handle crypto symbols
     if (symbol.startsWith('CRYPTO_')) {
-      exchange = 'BINANCE';
       tvSymbol = symbol.replace('CRYPTO_', '') + 'USDT';
+    } else if (symbol === 'NIFTY') {
+      tvSymbol = 'NIFTY50';
+    } else if (symbol === 'BANKNIFTY') {
+      tvSymbol = 'BANKNIFTY';
     }
     
     return `https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=${exchange}%3A${tvSymbol}&interval=5&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=f1f3f6&studies=%5B%22MASimple%40tv-basicstudies%22%2C%22MASimple%40tv-basicstudies%22%5D&theme=dark&style=1&timezone=exchange&withdateranges=1&studies_overrides=%5B%7B%22id%22%3A%22MASimple%40tv-basicstudies%22%2C%22inputs%22%3A%7B%22length%22%3A20%2C%22color%22%3A%22rgb%2830%2C%20201%2C%20220%29%22%7D%7D%2C%7B%22id%22%3A%22MASimple%40tv-basicstudies_1%22%2C%22inputs%22%3A%7B%22length%22%3A50%2C%22color%22%3A%22rgb%28241%2C%20158%2C%2077%29%22%7D%7D%5D&utm_source=app.lovable.dev&utm_medium=widget&utm_campaign=chart`;
@@ -324,6 +386,23 @@ const Dashboard: React.FC = () => {
             </Button>
           </div>
         </div>
+        
+        {/* Market closed warning */}
+        {showMarketClosedWarning && (
+          <Card className="border-border/50 bg-destructive/10 backdrop-blur">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                <p className="text-destructive font-medium">Market is currently closed</p>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                Indian stock market trading hours are from 9:15 AM to 3:30 PM IST, Monday to Friday.
+                You can still view signals and predictions, but trades can only be executed during market hours.
+                Cryptocurrency trading is available 24/7.
+              </p>
+            </CardContent>
+          </Card>
+        )}
         
         {/* Active Trade Card (new) */}
         {activeTrade && (
@@ -471,6 +550,16 @@ const Dashboard: React.FC = () => {
                     </span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-muted-foreground">Signal Strength</span>
+                    <span className={`font-mono ${
+                      signalStrength > 60 ? 'text-trade-buy' : 
+                      signalStrength < 40 ? 'text-trade-sell' : 
+                      'text-trade-neutral'
+                    }`}>
+                      {signalStrength}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">Price</span>
                     <span className="font-mono">₹{latestPrediction.price.toFixed(2)}</span>
                   </div>
@@ -483,16 +572,85 @@ const Dashboard: React.FC = () => {
                   <span className="text-muted-foreground">No signals yet</span>
                 </div>
               )}
-              {latestPrediction && latestPrediction.confidence < 0.7 && latestPrediction.action !== 'HOLD' && (
-                <div className="mt-3">
-                  <Button variant="outline" className="w-full" onClick={executeManualTrade}>
-                    Execute Manual Trade
-                  </Button>
-                </div>
-              )}
+              
+              {/* Manual trade buttons */}
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                <Button 
+                  variant="outline" 
+                  className="border-trade-buy text-trade-buy hover:bg-trade-buy/10"
+                  onClick={() => handleManualTradeExecution('BUY')}
+                >
+                  Buy {selectedSymbol}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="border-trade-sell text-trade-sell hover:bg-trade-sell/10"
+                  onClick={() => handleManualTradeExecution('SELL')}
+                >
+                  Sell {selectedSymbol}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
+        
+        {/* Signal Strength Indicator */}
+        <Card className="border-border/50 bg-card/95 backdrop-blur">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Signal Strength</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Bearish</span>
+                <span>Neutral</span>
+                <span>Bullish</span>
+              </div>
+              <div className="w-full bg-muted/20 h-2 rounded-full overflow-hidden">
+                <div 
+                  className={`h-2 ${
+                    signalStrength > 60 ? 'bg-trade-buy' : 
+                    signalStrength < 40 ? 'bg-trade-sell' : 
+                    'bg-muted-foreground'
+                  }`}
+                  style={{ width: `${signalStrength}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Strong Sell</span>
+                <span>Hold</span>
+                <span>Strong Buy</span>
+              </div>
+              
+              <div className="mt-3 pt-3 border-t border-muted">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="text-center">
+                    <div className="text-xs uppercase text-muted-foreground">Bearish Signal</div>
+                    <div className={`text-lg font-semibold ${signalStrength < 40 ? 'text-trade-sell' : 'text-muted-foreground/50'}`}>
+                      {100 - signalStrength}%
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs uppercase text-muted-foreground">Current Signal</div>
+                    <div className={`text-lg font-semibold ${
+                      signalStrength > 60 ? 'text-trade-buy' : 
+                      signalStrength < 40 ? 'text-trade-sell' : 
+                      'text-muted-foreground'
+                    }`}>
+                      {signalStrength > 60 ? 'BUY' : signalStrength < 40 ? 'SELL' : 'NEUTRAL'}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs uppercase text-muted-foreground">Bullish Signal</div>
+                    <div className={`text-lg font-semibold ${signalStrength > 60 ? 'text-trade-buy' : 'text-muted-foreground/50'}`}>
+                      {signalStrength}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         
         {/* Instrument Selector and Settings */}
         <Card className="border-border/50 bg-card/95 backdrop-blur">
@@ -708,6 +866,100 @@ const Dashboard: React.FC = () => {
             </CardFooter>
           )}
         </Card>
+
+        {/* Manual Trading Card */}
+        <Card className="border-border/50 bg-card/95 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="text-lg">Manual Trading</CardTitle>
+            <CardDescription>Execute trades manually based on your own analysis</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h3 className="text-sm font-medium mb-3">Market Orders</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button 
+                    className="w-full bg-trade-buy hover:bg-trade-buy/80"
+                    onClick={() => handleManualTradeExecution('BUY')}
+                  >
+                    BUY {selectedSymbol}
+                  </Button>
+                  <Button 
+                    className="w-full bg-trade-sell hover:bg-trade-sell/80"
+                    onClick={() => handleManualTradeExecution('SELL')}
+                  >
+                    SELL {selectedSymbol}
+                  </Button>
+                </div>
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium mb-2">Order Details</h4>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Symbol:</span>
+                    <span className="font-mono">{selectedSymbol}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm mt-1">
+                    <span className="text-muted-foreground">Quantity:</span>
+                    <span className="font-mono">{tradeQuantity}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm mt-1">
+                    <span className="text-muted-foreground">Order Type:</span>
+                    <span className="font-mono">MARKET</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-sm font-medium mb-3">Current Signal</h3>
+                <div className="bg-muted/30 p-4 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-muted-foreground">AI Recommendation:</span>
+                    <span className={`font-semibold ${
+                      latestPrediction?.action === 'BUY' ? 'text-trade-buy' : 
+                      latestPrediction?.action === 'SELL' ? 'text-trade-sell' : 
+                      'text-muted-foreground'
+                    }`}>
+                      {latestPrediction?.action || 'NONE'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-muted-foreground">Confidence:</span>
+                    <span className="font-mono">
+                      {latestPrediction ? `${(latestPrediction.confidence * 100).toFixed(1)}%` : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Signal Strength:</span>
+                    <span className="font-mono">{signalStrength}%</span>
+                  </div>
+                  
+                  <Separator className="my-3" />
+                  
+                  <div className="text-xs text-muted-foreground">
+                    <p>
+                      {signalStrength > 70 ? 'Strong buy signal detected. Consider taking a long position.' : 
+                       signalStrength > 60 ? 'Moderate buy signal. The trend appears bullish.' :
+                       signalStrength < 30 ? 'Strong sell signal detected. Consider taking a short position.' :
+                       signalStrength < 40 ? 'Moderate sell signal. The trend appears bearish.' :
+                       'Neutral signal. The market is showing no clear direction.'}
+                    </p>
+                  </div>
+                </div>
+                
+                {activeTrade && (
+                  <div className="mt-4">
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={handleStopCurrentTrade}
+                    >
+                      Close {activeTrade.position} position for {activeTrade.symbol}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         
         {/* Tabs for orders and logs */}
         <Tabs defaultValue="orders" className="w-full">
@@ -861,6 +1113,14 @@ const Dashboard: React.FC = () => {
                     <h3 className="font-medium mb-2">Symbol-Specific Learning</h3>
                     <p className="text-sm text-muted-foreground">
                       The AI maintains separate learning models for each trading instrument, recognizing that different stocks and cryptocurrencies behave differently in various market conditions.
+                    </p>
+                  </div>
+                  
+                  <div className="border-l-2 border-muted-foreground/30 pl-4 pb-2">
+                    <h3 className="font-medium mb-2">Market Hours Intelligence</h3>
+                    <p className="text-sm text-muted-foreground">
+                      The system recognizes market trading hours for each asset class. Stock trading follows exchange hours (9:15 AM to 3:30 PM IST for Indian markets),
+                      while cryptocurrency trading is available 24/7. Signals are still calculated during closed hours but trades are only executed when markets are open.
                     </p>
                   </div>
                   

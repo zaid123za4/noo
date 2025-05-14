@@ -32,7 +32,43 @@ const activePositions: Record<string, 'BUY' | 'SELL' | null> = {};
 // Keep track of position entry prices for P&L calculation
 const positionEntryPrices: Record<string, number> = {};
 
-// Trading strategy using SMA crossover with position holding
+// Track signal strength for each symbol (0-100 scale)
+const signalStrength: Record<string, number> = {};
+
+// Minimum required signal strength difference to change position
+const SIGNAL_STRENGTH_THRESHOLD = 15;
+
+// Track market hours
+const isMarketOpen = (): boolean => {
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const day = now.getDay();
+  
+  // Weekend check (0 is Sunday, 6 is Saturday)
+  if (day === 0 || day === 6) {
+    return false;
+  }
+  
+  // Indian market hours (9:15 AM to 3:30 PM)
+  // Note: This uses local time, adjust if needed for timezone differences
+  const isRegularHours = (hours > 9 || (hours === 9 && minutes >= 15)) && (hours < 15 || (hours === 15 && minutes <= 30));
+  
+  // For crypto we can allow 24/7 trading
+  // This would be determined based on the symbol in a real implementation
+  
+  return isRegularHours;
+};
+
+// Check if symbol is a cryptocurrency
+const isCrypto = (symbol: string): boolean => {
+  return symbol.startsWith('CRYPTO_') || 
+         symbol.includes('BTC') || 
+         symbol.includes('ETH') ||
+         symbol.includes('USDT');
+};
+
+// Trading strategy using SMA crossover with position holding and signal strength
 export async function runTradingStrategy(
   symbol: string = 'NIFTY'
 ): Promise<PredictionResult> {
@@ -67,17 +103,53 @@ export async function runTradingStrategy(
     // Check current position for this symbol
     const currentPosition = activePositions[symbol] || null;
     
+    // Check current signal strength
+    const currentSignalStrength = signalStrength[symbol] || 50; // Default to neutral
+    
     // Determine action based on crossover and current position
     let action: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
     let confidence = 0;
     let message = '';
+    let newSignalStrength = currentSignalStrength;
+    
+    // Market hours check for non-crypto assets
+    const marketOpen = isCrypto(symbol) || isMarketOpen();
+    
+    if (!marketOpen && !isCrypto(symbol)) {
+      action = 'HOLD';
+      confidence = 0.9;
+      message = `Market is closed for ${symbol}. Trading available between 9:15 AM and 3:30 PM on weekdays.`;
+      
+      // Still calculate the signal for informational purposes
+      if (latestSMA20 > latestSMA50) {
+        newSignalStrength = Math.min(95, currentSignalStrength + 5);
+        message += ` Bullish signal strength: ${newSignalStrength}%`;
+      } else if (latestSMA20 < latestSMA50) {
+        newSignalStrength = Math.max(5, currentSignalStrength - 5);
+        message += ` Bearish signal strength: ${100 - newSignalStrength}%`;
+      }
+      
+      signalStrength[symbol] = newSignalStrength;
+      
+      return {
+        action,
+        confidence,
+        timestamp: new Date(),
+        price: currentPrice,
+        message,
+        signalStrength: newSignalStrength
+      };
+    }
     
     // Golden Cross (SMA20 crosses above SMA50) - Bullish signal
     if (previousSMA20 <= previousSMA50 && latestSMA20 > latestSMA50) {
+      // Strong bullish signal
+      newSignalStrength = Math.min(100, currentSignalStrength + 25);
+      
       // Only BUY if we're not already in a BUY position
       if (currentPosition !== 'BUY') {
         action = 'BUY';
-        confidence = 0.75 + (Math.random() * 0.2); // Random confidence between 0.75 and 0.95
+        confidence = 0.80 + (Math.random() * 0.15); // Higher confidence for crossover
         message = `SMA(${shortSMA}) crossed above SMA(${longSMA}) - Golden Cross detected`;
         
         // If we're in SELL position, record the outcome
@@ -90,16 +162,19 @@ export async function runTradingStrategy(
         positionEntryPrices[symbol] = currentPrice; // Record entry price
       } else {
         action = 'HOLD';
-        confidence = 0.65 + (Math.random() * 0.2);
+        confidence = 0.75 + (Math.random() * 0.15);
         message = `Already in BUY position - Continue holding as trend is still bullish`;
       }
     }
     // Death Cross (SMA20 crosses below SMA50) - Bearish signal
     else if (previousSMA20 >= previousSMA50 && latestSMA20 < latestSMA50) {
+      // Strong bearish signal
+      newSignalStrength = Math.max(0, currentSignalStrength - 25);
+      
       // Only SELL if we're not already in a SELL position
       if (currentPosition !== 'SELL') {
         action = 'SELL';
-        confidence = 0.70 + (Math.random() * 0.2); // Random confidence between 0.70 and 0.90
+        confidence = 0.75 + (Math.random() * 0.15); // High confidence for crossover
         message = `SMA(${shortSMA}) crossed below SMA(${longSMA}) - Death Cross detected`;
         
         // If we're in BUY position, record the outcome
@@ -112,19 +187,25 @@ export async function runTradingStrategy(
         positionEntryPrices[symbol] = currentPrice; // Record entry price
       } else {
         action = 'HOLD';
-        confidence = 0.65 + (Math.random() * 0.2);
+        confidence = 0.70 + (Math.random() * 0.15);
         message = `Already in SELL position - Continue holding as trend is still bearish`;
       }
     }
-    // No crossover, check trends
+    // No crossover, check trends and signal strength changes
     else {
       if (latestSMA20 > latestSMA50) {
-        // Bullish trend continues
-        if (currentPosition === 'SELL') {
-          // We're in a SELL position but trend is turning bullish - close position
+        // Bullish trend continues, increase signal strength
+        newSignalStrength = Math.min(95, currentSignalStrength + 2);
+        
+        // Check if signal strength change is significant enough for action
+        const signalChange = newSignalStrength - currentSignalStrength;
+        
+        // We're in a SELL position but signal is becoming strongly bullish
+        if (currentPosition === 'SELL' && newSignalStrength >= 70 && signalChange >= SIGNAL_STRENGTH_THRESHOLD) {
+          // Signal strong enough to change position
           action = 'BUY'; // Buy to close sell position
-          confidence = 0.60 + (Math.random() * 0.15);
-          message = `Closing SELL position as SMA(${shortSMA}) remains above SMA(${longSMA}) - Bullish trend detected`;
+          confidence = 0.65 + (Math.random() * 0.15);
+          message = `Closing SELL position as bullish signal strength increased to ${newSignalStrength}%`;
           
           // Record the outcome
           if (positionEntryPrices[symbol]) {
@@ -134,26 +215,32 @@ export async function runTradingStrategy(
           
           activePositions[symbol] = 'BUY';
           positionEntryPrices[symbol] = currentPrice;
-        } else if (currentPosition !== 'BUY') {
-          // Not in a position yet, enter BUY
+        } else if (currentPosition !== 'BUY' && newSignalStrength >= 75) {
+          // Not in a position yet, enter BUY if signal is strong enough
           action = 'BUY';
-          confidence = 0.55 + (Math.random() * 0.2);
-          message = `SMA(${shortSMA}) remains above SMA(${longSMA}) - Entering bullish trend`;
+          confidence = 0.60 + (Math.random() * 0.15);
+          message = `Strong bullish signal (${newSignalStrength}%) - Entering bullish trend`;
           activePositions[symbol] = 'BUY';
           positionEntryPrices[symbol] = currentPrice;
         } else {
-          // Already in BUY position
+          // Hold current position
           action = 'HOLD';
           confidence = 0.60 + (Math.random() * 0.15);
-          message = `SMA(${shortSMA}) remains above SMA(${longSMA}) - Continue holding bullish position`;
+          message = `Bullish trend continues - Signal strength: ${newSignalStrength}%`;
         }
       } else if (latestSMA20 < latestSMA50) {
-        // Bearish trend continues
-        if (currentPosition === 'BUY') {
-          // We're in a BUY position but trend is turning bearish - close position
+        // Bearish trend continues, decrease signal strength
+        newSignalStrength = Math.max(5, currentSignalStrength - 2);
+        
+        // Check if signal strength change is significant enough for action
+        const signalChange = currentSignalStrength - newSignalStrength;
+        
+        // We're in a BUY position but signal is becoming strongly bearish
+        if (currentPosition === 'BUY' && newSignalStrength <= 30 && signalChange >= SIGNAL_STRENGTH_THRESHOLD) {
+          // Signal strong enough to change position
           action = 'SELL'; // Sell to close buy position
-          confidence = 0.60 + (Math.random() * 0.15);
-          message = `Closing BUY position as SMA(${shortSMA}) remains below SMA(${longSMA}) - Bearish trend detected`;
+          confidence = 0.65 + (Math.random() * 0.15);
+          message = `Closing BUY position as bearish signal strength increased to ${100 - newSignalStrength}%`;
           
           // Record the outcome
           if (positionEntryPrices[symbol]) {
@@ -163,18 +250,18 @@ export async function runTradingStrategy(
           
           activePositions[symbol] = 'SELL';
           positionEntryPrices[symbol] = currentPrice;
-        } else if (currentPosition !== 'SELL') {
-          // Not in a position yet, enter SELL
+        } else if (currentPosition !== 'SELL' && newSignalStrength <= 25) {
+          // Not in a position yet, enter SELL if signal is strong enough
           action = 'SELL';
-          confidence = 0.55 + (Math.random() * 0.2);
-          message = `SMA(${shortSMA}) remains below SMA(${longSMA}) - Entering bearish trend`;
+          confidence = 0.60 + (Math.random() * 0.15);
+          message = `Strong bearish signal (${100 - newSignalStrength}%) - Entering bearish trend`;
           activePositions[symbol] = 'SELL';
           positionEntryPrices[symbol] = currentPrice;
         } else {
-          // Already in SELL position
+          // Hold current position
           action = 'HOLD';
           confidence = 0.60 + (Math.random() * 0.15);
-          message = `SMA(${shortSMA}) remains below SMA(${longSMA}) - Continue holding bearish position`;
+          message = `Bearish trend continues - Signal strength: ${100 - newSignalStrength}%`;
         }
       } else {
         action = 'HOLD';
@@ -182,6 +269,9 @@ export async function runTradingStrategy(
         message = `SMA(${shortSMA}) and SMA(${longSMA}) are nearly equal - No clear trend`;
       }
     }
+    
+    // Update the signal strength
+    signalStrength[symbol] = newSignalStrength;
     
     // Apply the confidence multiplier from learning algorithm
     confidence = Math.min(0.95, confidence * confidenceMultiplier);
@@ -200,7 +290,8 @@ export async function runTradingStrategy(
       confidence,
       timestamp: new Date(),
       price: currentPrice,
-      message
+      message,
+      signalStrength: newSignalStrength
     };
     recordPrediction(symbol, predictionResult);
     
@@ -220,7 +311,8 @@ export async function runTradingStrategy(
       confidence: 0,
       timestamp: new Date(),
       price: 0,
-      message: `Error: ${(error as Error).message}`
+      message: `Error: ${(error as Error).message}`,
+      signalStrength: 50
     };
   }
 }
@@ -236,6 +328,15 @@ export async function autoTradeExecutor(
     
     // Check if we should execute a trade
     if (prediction.action !== 'HOLD') {
+      // Check if market is open for non-crypto assets
+      if (!isCrypto(symbol) && !isMarketOpen()) {
+        dhanService.addLog(
+          `Cannot execute ${prediction.action} order for ${symbol} - Market is closed.`,
+          'warning'
+        );
+        return;
+      }
+      
       if (prediction.confidence >= 0.7) {
         // Confidence is high enough for automatic execution
         dhanService.addLog(
@@ -289,6 +390,66 @@ export async function runAllSymbolsStrategy(): Promise<void> {
   }
 }
 
+// Execute manual trade for a symbol
+export async function executeManualTrade(
+  symbol: string,
+  action: 'BUY' | 'SELL',
+  quantity: number = 1
+): Promise<boolean> {
+  try {
+    // Check if market is open for non-crypto assets
+    if (!isCrypto(symbol) && !isMarketOpen() && action !== 'HOLD') {
+      dhanService.addLog(
+        `Cannot execute manual ${action} order for ${symbol} - Market is closed.`,
+        'warning'
+      );
+      return false;
+    }
+    
+    // Get current price
+    const currentPrice = await dhanService.getCurrentPrice(symbol);
+    
+    dhanService.addLog(
+      `Manually executing ${action} order for ${quantity} ${symbol} @ ₹${currentPrice.toFixed(2)}`,
+      'info'
+    );
+    
+    // Place the order
+    await dhanService.placeOrder(
+      symbol,
+      action,
+      quantity,
+      'MARKET'
+    );
+    
+    // Update our internal state if the order was successful
+    if (action === 'BUY' || action === 'SELL') {
+      // If we're switching positions, record outcome of previous position
+      const currentPosition = activePositions[symbol];
+      if (currentPosition && currentPosition !== action && positionEntryPrices[symbol]) {
+        const entryPrice = positionEntryPrices[symbol];
+        const successful = currentPosition === 'BUY' ? 
+          currentPrice > entryPrice : 
+          currentPrice < entryPrice;
+        
+        recordOutcome(symbol, currentPosition, entryPrice, currentPrice, successful);
+      }
+      
+      // Update position tracking
+      activePositions[symbol] = action;
+      positionEntryPrices[symbol] = currentPrice;
+    }
+    
+    return true;
+  } catch (error) {
+    dhanService.addLog(
+      `Manual trade execution error for ${symbol}: ${(error as Error).message}`,
+      'error'
+    );
+    return false;
+  }
+}
+
 // New function to stop/close a current trade position
 export async function stopCurrentTrade(
   symbol: string,
@@ -300,6 +461,15 @@ export async function stopCurrentTrade(
     // If current position is BUY, we need to SELL to close it
     // If current position is SELL, we need to BUY to close it
     const closeAction = currentPosition === 'BUY' ? 'SELL' : 'BUY';
+    
+    // Check if market is open for non-crypto assets
+    if (!isCrypto(symbol) && !isMarketOpen()) {
+      dhanService.addLog(
+        `Cannot close position for ${symbol} - Market is closed.`,
+        'warning'
+      );
+      throw new Error(`Market is closed for ${symbol}`);
+    }
     
     dhanService.addLog(
       `Manually closing ${currentPosition} position for ${symbol} with ${closeAction} order for ${quantity} units`,
@@ -347,5 +517,28 @@ export async function stopCurrentTrade(
       'error'
     );
     throw error;
+  }
+}
+
+// Get current signal strength for a symbol
+export function getSignalStrength(symbol: string): number {
+  return signalStrength[symbol] || 50; // Default to neutral
+}
+
+// Get current active position for a symbol
+export function getCurrentPosition(symbol: string): 'BUY' | 'SELL' | null {
+  return activePositions[symbol] || null;
+}
+
+// Get specific chart URL provider based on symbol type
+export function getChartProvider(symbol: string): string {
+  if (isCrypto(symbol)) {
+    return 'BINANCE';
+  } else if (symbol.includes('NSE') || ['NIFTY', 'BANKNIFTY'].includes(symbol)) {
+    return 'NSE';
+  } else if (symbol.includes('BSE')) {
+    return 'BSE';
+  } else {
+    return 'NSE'; // Default to NSE for Indian markets
   }
 }
