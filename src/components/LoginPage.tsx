@@ -1,55 +1,31 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertCircle, ArrowRight } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertCircle, LogIn } from 'lucide-react';
 import dhanService from '@/services/dhanService';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/components/ui/use-toast';
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-
-const formSchema = z.object({
-  apiKey: z.string().min(1, { message: "API Key is required" }),
-  apiSecret: z.string().min(1, { message: "API Secret is required" }),
-});
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      apiKey: "",
-      apiSecret: "",
-    },
-  });
+  // Check if we have a code in the URL (after OAuth redirect)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    
+    if (code) {
+      handleOAuthCallback(code);
+    }
+  }, []);
   
-  const handleLogin = async (values: z.infer<typeof formSchema>) => {
+  const handleOAuthCallback = async (code: string) => {
     setIsLoading(true);
     try {
-      // Set the user's API credentials
-      dhanService.setCredentials(values.apiKey, values.apiSecret);
-      
-      // Attempt to login with provided credentials
-      const loginUrl = await dhanService.login();
-      
-      // For demo purposes, we'll simulate a successful callback
-      // In production, this would redirect to the Dhan login page 
-      // and then handle the callback with a request token
-      const success = await dhanService.handleCallback('mock_request_token');
+      // Exchange the code for an access token
+      const success = await dhanService.handleCallback(code);
       
       if (success) {
         toast({
@@ -57,15 +33,34 @@ const LoginPage: React.FC = () => {
           description: "You have been authenticated with Dhan",
         });
         navigate('/dashboard');
+      } else {
+        throw new Error('Authentication failed');
       }
     } catch (error) {
       console.error('Login failed:', error);
       toast({
         variant: "destructive",
         title: "Login failed",
-        description: "Could not authenticate with Dhan. Please check your credentials.",
+        description: "Could not authenticate with Dhan. Please try again.",
       });
     } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleLogin = () => {
+    setIsLoading(true);
+    try {
+      // Redirect to Dhan OAuth page
+      const authUrl = dhanService.getOAuthUrl();
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('Login initiation failed:', error);
+      toast({
+        variant: "destructive",
+        title: "Login failed",
+        description: "Could not initiate Dhan authentication. Please try again.",
+      });
       setIsLoading(false);
     }
   };
@@ -78,7 +73,7 @@ const LoginPage: React.FC = () => {
             Dhan Auto Trader
           </CardTitle>
           <CardDescription>
-            Log in with your Dhan API credentials to continue
+            Log in with your Dhan account to continue
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -87,61 +82,19 @@ const LoginPage: React.FC = () => {
             <div className="flex-1 space-y-1">
               <p className="text-sm font-medium leading-none">Connect Your Account</p>
               <p className="text-xs text-muted-foreground">
-                Enter your Dhan API credentials to access your account and start trading.
+                Log in with your Dhan account to start automated trading.
               </p>
             </div>
           </div>
           
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleLogin)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="apiKey"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>API Key</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter your Dhan API key" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      Found in your Dhan account dashboard
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="apiSecret"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>API Secret</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="password" 
-                        placeholder="Enter your Dhan API secret" 
-                        {...field} 
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Keep this secret and secure
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <Button 
-                type="submit" 
-                className="w-full font-semibold" 
-                disabled={isLoading}
-              >
-                {isLoading ? "Connecting..." : "Connect to Dhan"}
-                {!isLoading && <ArrowRight className="ml-2 h-4 w-4" />}
-              </Button>
-            </form>
-          </Form>
+          <Button 
+            onClick={handleLogin} 
+            className="w-full font-semibold"
+            disabled={isLoading}
+          >
+            {isLoading ? "Connecting..." : "Login with Dhan"}
+            {!isLoading && <LogIn className="ml-2 h-4 w-4" />}
+          </Button>
         </CardContent>
       </Card>
     </div>

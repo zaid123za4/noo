@@ -1,6 +1,4 @@
-
 // Dhan API Service
-// In a real implementation, this would connect to the Dhan API
 
 import { toast } from "@/components/ui/use-toast";
 
@@ -75,8 +73,8 @@ interface TradeLog {
 class DhanService {
   private isLoggedIn = false;
   private accessToken: string | null = null;
-  private apiKey: string = '';
-  private apiSecret: string = '';
+  private clientId = 'YOUR_CLIENT_ID'; // Replace with your actual client ID
+  private redirectUri = 'https://mytradingapp.com/callback'; // Replace with your actual redirect URI
   private tradeLogs: TradeLog[] = [];
   private orders: Order[] = [];
   
@@ -114,47 +112,24 @@ class DhanService {
     },
   };
 
-  // Set user credentials
-  setCredentials(apiKey: string, apiSecret: string): void {
-    this.apiKey = apiKey;
-    this.apiSecret = apiSecret;
-    localStorage.setItem('dhan_api_key', apiKey);
-    localStorage.setItem('dhan_api_secret', apiSecret);
+  // Get OAuth URL for login
+  getOAuthUrl(): string {
+    return `https://api.dhan.co/oauth/authorize?client_id=${this.clientId}&redirect_uri=${this.redirectUri}&response_type=code&scope=read,write`;
   }
   
-  // Check for stored credentials
-  loadStoredCredentials(): boolean {
-    const storedApiKey = localStorage.getItem('dhan_api_key');
-    const storedApiSecret = localStorage.getItem('dhan_api_secret');
-    
-    if (storedApiKey && storedApiSecret) {
-      this.apiKey = storedApiKey;
-      this.apiSecret = storedApiSecret;
-      return true;
-    }
-    
-    return false;
-  }
-  
-  // Login function - in a real app, this would redirect to Dhan login
-  async login(): Promise<string> {
-    if (!this.apiKey || !this.apiSecret) {
-      throw new Error('API credentials not set');
-    }
-    
-    // In a real app, this would redirect to the Dhan OAuth page
-    // or use the API credentials to authenticate
-    this.addLog('Initiating Dhan login process', 'info');
-    return `https://api.dhan.co/login?api_key=${this.apiKey}&v=1`;
-  }
-  
-  // Handle the callback from Dhan OAuth
-  async handleCallback(requestToken: string): Promise<boolean> {
+  // Handle the callback from Dhan OAuth with authorization code
+  async handleCallback(code: string): Promise<boolean> {
     try {
-      // In a real implementation, this would exchange the request token for an access token
+      // In a real implementation, this would exchange the authorization code for an access token
+      // by making a server-side request to Dhan's token endpoint
+      
+      // For demo purposes, we're simulating a successful token exchange
       this.accessToken = 'mock_access_token_' + Math.random().toString(36).substring(7);
       this.isLoggedIn = true;
       this.addLog('Successfully logged in to Dhan', 'success');
+      
+      // Store the token in localStorage for persistence
+      localStorage.setItem('dhan_access_token', this.accessToken);
       
       // Fetch initial user data after successful login
       await this.getProfile();
@@ -169,28 +144,39 @@ class DhanService {
   
   // Check if user is logged in
   isAuthenticated(): boolean {
-    return this.isLoggedIn;
+    // Check if we're already logged in
+    if (this.isLoggedIn) {
+      return true;
+    }
+    
+    // Check if we have a stored token
+    const storedToken = localStorage.getItem('dhan_access_token');
+    if (storedToken) {
+      this.accessToken = storedToken;
+      this.isLoggedIn = true;
+      return true;
+    }
+    
+    return false;
   }
   
   // Get user profile
   async getProfile(): Promise<UserProfile> {
-    if (!this.isLoggedIn) {
-      // Try to load credentials and auto-login
-      if (this.loadStoredCredentials()) {
-        try {
-          await this.login();
-          await this.handleCallback('auto_login_token');
-        } catch (error) {
-          throw new Error('Not logged in');
-        }
-      } else {
-        throw new Error('Not logged in');
-      }
+    if (!this.isAuthenticated()) {
+      throw new Error('Not logged in');
     }
     
     // In a real app, this would fetch profile from Dhan API
     this.addLog('Fetched user profile', 'info');
     return this.mockProfile;
+  }
+  
+  // Logout
+  logout(): void {
+    this.isLoggedIn = false;
+    this.accessToken = null;
+    localStorage.removeItem('dhan_access_token');
+    this.addLog('Logged out from Dhan', 'info');
   }
   
   // Get user funds
@@ -343,17 +329,6 @@ class DhanService {
     return [...this.tradeLogs].sort((a, b) => 
       b.timestamp.getTime() - a.timestamp.getTime()
     );
-  }
-  
-  // Logout
-  logout(): void {
-    this.isLoggedIn = false;
-    this.accessToken = null;
-    this.apiKey = '';
-    this.apiSecret = '';
-    localStorage.removeItem('dhan_api_key');
-    localStorage.removeItem('dhan_api_secret');
-    this.addLog('Logged out from Dhan', 'info');
   }
   
   // Get available symbols
