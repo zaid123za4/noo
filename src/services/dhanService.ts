@@ -78,6 +78,7 @@ class DhanService {
   private redirectUri = 'https://mytradingapp.com/callback'; // Replace with your actual redirect URI
   private tradeLogs: TradeLog[] = [];
   private orders: Order[] = [];
+  private isDemoMode = false;
   
   // Mock data for demonstration
   private mockProfile: UserProfile = {
@@ -113,6 +114,19 @@ class DhanService {
     },
   };
 
+  // Set demo mode and funds
+  addDemoFunds(amount: number): void {
+    this.isDemoMode = true;
+    this.isLoggedIn = true; // Auto-login in demo mode
+    this.mockFunds.equity.available.cash = amount;
+    this.addLog(`Demo mode activated with ₹${amount.toLocaleString()} virtual funds`, 'success');
+  }
+  
+  // Check if in demo mode
+  isInDemoMode(): boolean {
+    return this.isDemoMode;
+  }
+
   // Get OAuth URL for login
   getOAuthUrl(): string {
     return `https://api.dhan.co/oauth/authorize?client_id=${this.clientId}&redirect_uri=${this.redirectUri}&response_type=code&scope=read,write`;
@@ -120,6 +134,11 @@ class DhanService {
   
   // Handle the callback from Dhan OAuth with authorization code
   async handleCallback(code: string): Promise<boolean> {
+    // If we're in demo mode, we're already "logged in"
+    if (this.isDemoMode) {
+      return true;
+    }
+
     try {
       // In a real implementation, this would exchange the authorization code for an access token
       // by making a server-side request to Dhan's token endpoint
@@ -145,6 +164,11 @@ class DhanService {
   
   // Check if user is logged in
   isAuthenticated(): boolean {
+    // If we're in demo mode, we're always "authenticated"
+    if (this.isDemoMode) {
+      return true;
+    }
+    
     // Check if we're already logged in
     if (this.isLoggedIn) {
       return true;
@@ -176,13 +200,14 @@ class DhanService {
   logout(): void {
     this.isLoggedIn = false;
     this.accessToken = null;
+    this.isDemoMode = false;
     localStorage.removeItem('dhan_access_token');
     this.addLog('Logged out from Dhan', 'info');
   }
   
   // Get user funds
   async getFunds(): Promise<Funds> {
-    if (!this.isLoggedIn) {
+    if (!this.isLoggedIn && !this.isDemoMode) {
       throw new Error('Not logged in');
     }
     
@@ -248,7 +273,7 @@ class DhanService {
     orderType: 'MARKET' | 'LIMIT' = 'MARKET',
     price?: number
   ): Promise<Order> {
-    if (!this.isLoggedIn) {
+    if (!this.isLoggedIn && !this.isDemoMode) {
       throw new Error('Not logged in');
     }
     

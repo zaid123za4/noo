@@ -31,11 +31,12 @@ const AdminLogin: React.FC = () => {
     if (enteredCode.length === 4) {
       if (enteredCode === correctPasscode) {
         toast({
-          title: "Admin access granted",
-          description: "Welcome to admin panel",
+          title: "Demo mode activated",
+          description: "Welcome to demo trading mode with virtual funds",
         });
         setIsOpen(false);
-        navigate('/admin-panel');
+        // Navigate to dashboard with demo=true parameter to activate demo mode
+        navigate('/dashboard?demo=true');
       } else {
         toast({
           variant: "destructive",
@@ -54,13 +55,13 @@ const AdminLogin: React.FC = () => {
         onClick={() => setIsOpen(true)}
         className="bg-slate-800 text-white hover:bg-slate-700"
       >
-        Admin Access
+        Demo Trading
       </Button>
       
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-center">Admin Authentication</DialogTitle>
+            <DialogTitle className="text-center">Enter Demo Code</DialogTitle>
           </DialogHeader>
           
           <div className="flex flex-col items-center space-y-4">
