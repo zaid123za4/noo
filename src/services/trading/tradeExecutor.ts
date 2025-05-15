@@ -9,6 +9,7 @@ import {
   clearPosition
 } from './positionTracker';
 import { recordOutcome } from '../tradingLearning';
+import { toast } from "@/components/ui/use-toast";
 
 // Execute trades based on the trading strategy
 export async function autoTradeExecutor(
@@ -27,6 +28,13 @@ export async function autoTradeExecutor(
           `Cannot execute ${prediction.action} order for ${symbol} - Market is closed.`,
           'warning'
         );
+        
+        toast({
+          title: "Market Closed",
+          description: `Cannot execute ${prediction.action} order for ${symbol}. Trading available between 9:15 AM and 3:30 PM on weekdays.`,
+          variant: "destructive",
+        });
+        
         return;
       }
       
@@ -91,11 +99,18 @@ export async function executeManualTrade(
 ): Promise<boolean> {
   try {
     // Check if market is open for non-crypto assets
-    if (!isCrypto(symbol) && !isMarketOpen() && action !== 'BUY' && action !== 'SELL') {
+    if (!isCrypto(symbol) && !isMarketOpen()) {
       dhanService.addLog(
         `Cannot execute manual ${action} order for ${symbol} - Market is closed.`,
         'warning'
       );
+      
+      toast({
+        title: "Market Closed",
+        description: `Cannot execute ${action} order for ${symbol}. Trading available between 9:15 AM and 3:30 PM on weekdays.`,
+        variant: "destructive",
+      });
+      
       return false;
     }
     
@@ -162,6 +177,13 @@ export async function stopCurrentTrade(
         `Cannot close position for ${symbol} - Market is closed.`,
         'warning'
       );
+      
+      toast({
+        title: "Market Closed",
+        description: `Cannot close position for ${symbol}. Trading available between 9:15 AM and 3:30 PM on weekdays.`,
+        variant: "destructive",
+      });
+      
       throw new Error(`Market is closed for ${symbol}`);
     }
     

@@ -1,4 +1,3 @@
-
 import dhanService from '../dhanService';
 
 // Check if market is open
@@ -51,11 +50,30 @@ export function calculateSMA(data: any[], period: number): number[] {
 export function getChartProvider(symbol: string): string {
   if (isCrypto(symbol)) {
     return 'BINANCE';
-  } else if (symbol.includes('NSE') || ['NIFTY', 'BANKNIFTY'].includes(symbol)) {
+  } else if (symbol === 'NIFTY' || symbol === 'NIFTY50') {
+    return 'NSE';
+  } else if (symbol === 'BANKNIFTY') {
+    return 'NSE';
+  } else if (symbol.includes('NSE')) {
     return 'NSE';
   } else if (symbol.includes('BSE')) {
     return 'BSE';
   } else {
     return 'NSE'; // Default to NSE for Indian markets
+  }
+}
+
+// Map symbol to TradingView compatible symbol
+export function getTradingViewSymbol(symbol: string): string {
+  // Map common symbols to their TradingView equivalents
+  if (symbol === 'NIFTY' || symbol === 'NIFTY50') {
+    return 'NIFTY50';
+  } else if (symbol === 'BANKNIFTY') {
+    return 'BANKNIFTY';
+  } else if (symbol.startsWith('CRYPTO_')) {
+    return symbol.replace('CRYPTO_', '') + 'USDT';
+  } else {
+    // For regular stocks, keep as is or add exchange prefix if needed
+    return symbol;
   }
 }

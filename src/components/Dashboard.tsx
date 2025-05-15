@@ -15,13 +15,18 @@ import {
   executeManualTrade,
   getSignalStrength,
   getCurrentPosition,
-  getChartProvider
-} from '@/services/tradingStrategy';
+  getChartProvider,
+  isMarketOpen,
+  isCrypto,
+  getTradingViewSymbol
+} from '@/services/trading';
 import { useNavigate } from 'react-router-dom';
 import InstrumentSelector from './InstrumentSelector';
 import { getSymbolPerformance, getRecentPredictions } from '@/services/tradingLearning';
 import { useTradingMode } from '@/hooks/use-trading-mode';
 import { useDemoMode } from '@/hooks/use-demo-mode';
+import { AspectRatio } from '@/components/ui/aspect-ratio';
+import { toast } from "@/components/ui/use-toast";
 
 const Dashboard: React.FC = () => {
   const { toast } = useToast();
@@ -55,6 +60,7 @@ const Dashboard: React.FC = () => {
   const [signalStrength, setSignalStrength] = useState<number>(50);
   const [chartProvider, setChartProvider] = useState<string>('NSE');
   const [showMarketClosedWarning, setShowMarketClosedWarning] = useState<boolean>(false);
+  const [isCurrentMarketOpen, setIsCurrentMarketOpen] = useState<boolean>(false);
   
   const { mode: tradingMode, toggleTradingMode, isAutoMode, isManualMode } = useTradingMode({
     symbol: selectedSymbol,
@@ -160,19 +166,10 @@ const Dashboard: React.FC = () => {
         await loadPredictionForSymbol(selectedSymbol);
       }
       
-      // Check if market is currently open
-      const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      const day = now.getDay();
-      
-      // Weekend check (0 is Sunday, 6 is Saturday)
-      const isWeekend = day === 0 || day === 6;
-      
-      // Indian market hours (9:15 AM to 3:30 PM)
-      const isMarketHours = (hours > 9 || (hours === 9 && minutes >= 15)) && (hours < 15 || (hours === 15 && minutes <= 30));
-      
-      setShowMarketClosedWarning(!isMarketHours || isWeekend);
+      // Check market hours
+      const marketOpen = isCrypto(selectedSymbol) || isMarketOpen();
+      setIsCurrentMarketOpen(marketOpen);
+      setShowMarketClosedWarning(!marketOpen && !isCrypto(selectedSymbol));
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -328,19 +325,237 @@ const Dashboard: React.FC = () => {
   
   // Generate TradingView chart URL based on selected symbol
   const getTradingViewUrl = (symbol: string): string => {
-    let exchange = chartProvider;
-    let tvSymbol = symbol;
-    
-    // Handle crypto symbols
-    if (symbol.startsWith('CRYPTO_')) {
-      tvSymbol = symbol.replace('CRYPTO_', '') + 'USDT';
-    } else if (symbol === 'NIFTY') {
-      tvSymbol = 'NIFTY50';
-    } else if (symbol === 'BANKNIFTY') {
-      tvSymbol = 'BANKNIFTY';
-    }
+    const exchange = getChartProvider(symbol);
+    const tvSymbol = getTradingViewSymbol(symbol);
     
     return `https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=${exchange}%3A${tvSymbol}&interval=5&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=f1f3f6&studies=%5B%22MASimple%40tv-basicstudies%22%2C%22MASimple%40tv-basicstudies%22%5D&theme=dark&style=1&timezone=exchange&withdateranges=1&studies_overrides=%5B%7B%22id%22%3A%22MASimple%40tv-basicstudies%22%2C%22inputs%22%3A%7B%22length%22%3A20%2C%22color%22%3A%22rgb%2830%2C%20201%2C%20220%29%22%7D%7D%2C%7B%22id%22%3A%22MASimple%40tv-basicstudies_1%22%2C%22inputs%22%3A%7B%22length%22%3A50%2C%22color%22%3A%22rgb%28241%2C%20158%2C%2077%29%22%7D%7D%5D&utm_source=app.lovable.dev&utm_medium=widget&utm_campaign=chart`;
+  };
+  
+  // Add a useEffect to periodically check market hours
+  useEffect(() => {
+    // Function to check market hours
+    const checkMarketHours = () => {
+      // For the currently selected symbol
+      const marketOpen = isCrypto(selectedSymbol) || isMarketOpen();
+      setIsCurrentMarketOpen(marketOpen);
+      setShowMarketClosedWarning(!marketOpen && !isCrypto(selectedSymbol));
+    };
+    
+    // Check immediately and set up interval
+    checkMarketHours();
+    const marketCheckInterval = setInterval(checkMarketHours, 60000); // Check every minute
+    
+    return () => clearInterval(marketCheckInterval);
+  }, [selectedSymbol]);
+  
+  const renderTradeButtons = () => {
+    const isSymbolTradeable = isCrypto(selectedSymbol) || isCurrentMarketOpen;
+    
+    return (
+      <div className="grid grid-cols-2 gap-2 mt-4">
+        <Button 
+          variant="outline" 
+          className="border-trade-buy text-trade-buy hover:bg-trade-buy/10"
+          onClick={() => handleManualTradeExecution('BUY')}
+          disabled={!isSymbolTradeable}
+        >
+          Buy {selectedSymbol}
+        </Button>
+        <Button 
+          variant="outline" 
+          className="border-trade-sell text-trade-sell hover:bg-trade-sell/10"
+          onClick={() => handleManualTradeExecution('SELL')}
+          disabled={!isSymbolTradeable}
+        >
+          Sell {selectedSymbol}
+        </Button>
+        {!isSymbolTradeable && !isCrypto(selectedSymbol) && (
+          <div className="col-span-2 mt-2">
+            <p className="text-xs text-red-400">
+              Market is closed. Trading available between 9:15 AM and 3:30 PM on weekdays.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+  
+  const renderChart = () => {
+    return (
+      <Card className="border-border/50 bg-card/95 backdrop-blur">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-lg">{selectedSymbol} Chart</CardTitle>
+          {latestPrediction && (
+            <Badge variant="outline" className={`${
+              latestPrediction.action === 'BUY' 
+                ? 'bg-trade-buy/10 text-trade-buy border-trade-buy/30' 
+                : latestPrediction.action === 'SELL'
+                  ? 'bg-trade-sell/10 text-trade-sell border-trade-sell/30'
+                  : 'bg-muted/10 text-muted-foreground border-border'
+              }`}>
+              {latestPrediction.action} signal • {(latestPrediction.confidence * 100).toFixed(1)}% confidence
+            </Badge>
+          )}
+        </CardHeader>
+        <CardContent className="h-[400px]">
+          <div className="tradingview-widget-container w-full h-full">
+            <AspectRatio ratio={16/9} className="bg-muted/30">
+              <iframe 
+                src={getTradingViewUrl(selectedSymbol)}
+                title={`${selectedSymbol} Chart`}
+                className="w-full h-full"
+                frameBorder="0"
+                allowTransparency={true}
+                onError={(e) => {
+                  console.error("Chart loading error", e);
+                  toast({
+                    title: "Chart Error",
+                    description: `Failed to load chart for ${selectedSymbol}`,
+                    variant: "destructive",
+                  });
+                }}
+              />
+            </AspectRatio>
+          </div>
+        </CardContent>
+        {latestPrediction && (
+          <CardFooter className={`px-4 py-2 text-xs ${
+            latestPrediction.action === 'BUY' 
+              ? 'text-trade-buy' 
+              : latestPrediction.action === 'SELL'
+                ? 'text-trade-sell'
+                : 'text-muted-foreground'
+            }`}>
+            {latestPrediction.message}
+          </CardFooter>
+        )}
+      </Card>
+    );
+  };
+  
+  const renderManualTradingCard = () => {
+    const isSymbolTradeable = isCrypto(selectedSymbol) || isCurrentMarketOpen;
+    
+    return (
+      <Card className="border-border/50 bg-card/95 backdrop-blur">
+        <CardHeader>
+          <CardTitle className="text-lg">Manual Trading</CardTitle>
+          <CardDescription>Execute trades manually based on your own analysis</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h3 className="text-sm font-medium mb-3">Market Orders</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <Button 
+                  className="w-full bg-trade-buy hover:bg-trade-buy/80"
+                  onClick={() => handleManualTradeExecution('BUY')}
+                  disabled={!isSymbolTradeable}
+                >
+                  BUY {selectedSymbol}
+                </Button>
+                <Button 
+                  className="w-full bg-trade-sell hover:bg-trade-sell/80"
+                  onClick={() => handleManualTradeExecution('SELL')}
+                  disabled={!isSymbolTradeable}
+                >
+                  SELL {selectedSymbol}
+                </Button>
+              </div>
+              
+              {!isSymbolTradeable && !isCrypto(selectedSymbol) && (
+                <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded-md">
+                  <p className="text-xs text-red-400 font-medium">
+                    Market is closed for {selectedSymbol}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Trading available between 9:15 AM and 3:30 PM on weekdays
+                  </p>
+                </div>
+              )}
+              
+              <div className="mt-4">
+                <h4 className="text-sm font-medium mb-2">Order Details</h4>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Symbol:</span>
+                  <span className="font-mono">{selectedSymbol}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm mt-1">
+                  <span className="text-muted-foreground">Quantity:</span>
+                  <span className="font-mono">{tradeQuantity}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm mt-1">
+                  <span className="text-muted-foreground">Order Type:</span>
+                  <span className="font-mono">MARKET</span>
+                </div>
+                <div className="flex items-center justify-between text-sm mt-1">
+                  <span className="text-muted-foreground">Market Status:</span>
+                  <Badge variant={isSymbolTradeable ? "outline" : "destructive"} className="font-mono">
+                    {isSymbolTradeable ? "OPEN" : "CLOSED"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h3 className="text-sm font-medium mb-3">Current Signal</h3>
+              <div className="bg-muted/30 p-4 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-muted-foreground">AI Recommendation:</span>
+                  <span className={`font-semibold ${
+                    latestPrediction?.action === 'BUY' ? 'text-trade-buy' : 
+                    latestPrediction?.action === 'SELL' ? 'text-trade-sell' : 
+                    'text-muted-foreground'
+                  }`}>
+                    {latestPrediction?.action || 'NONE'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-muted-foreground">Confidence:</span>
+                  <span className="font-mono">
+                    {latestPrediction ? `${(latestPrediction.confidence * 100).toFixed(1)}%` : 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Signal Strength:</span>
+                  <span className="font-mono">{signalStrength}%</span>
+                </div>
+                
+                <Separator className="my-3" />
+                
+                <div className="text-xs text-muted-foreground">
+                  <p>
+                    {signalStrength > 70 ? 'Strong buy signal detected. Consider taking a long position.' : 
+                     signalStrength > 60 ? 'Moderate buy signal. The trend appears bullish.' :
+                     signalStrength < 30 ? 'Strong sell signal detected. Consider taking a short position.' :
+                     signalStrength < 40 ? 'Moderate sell signal. The trend appears bearish.' :
+                     'Neutral signal. The market is showing no clear direction.'}
+                  </p>
+                </div>
+              </div>
+              
+              {activeTrade && (
+                <div className="mt-4">
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={handleStopCurrentTrade}
+                    disabled={!isSymbolTradeable && !isCrypto(selectedSymbol)}
+                  >
+                    Close {activeTrade.position} position for {activeTrade.symbol}
+                  </Button>
+                  {!isSymbolTradeable && !isCrypto(selectedSymbol) && (
+                    <p className="text-xs text-red-400 mt-1">
+                      Cannot close position when market is closed
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
   
   if (loading && !profile) {
@@ -410,12 +625,12 @@ const Dashboard: React.FC = () => {
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-destructive" />
-                <p className="text-destructive font-medium">Market is currently closed</p>
+                <p className="text-destructive font-medium">Market is currently closed for {selectedSymbol}</p>
               </div>
               <p className="text-sm text-muted-foreground mt-2">
                 Indian stock market trading hours are from 9:15 AM to 3:30 PM IST, Monday to Friday.
                 You can still view signals and predictions, but trades can only be executed during market hours.
-                Cryptocurrency trading is available 24/7.
+                {isCrypto(selectedSymbol) ? " Cryptocurrency trading is available 24/7." : ""}
               </p>
             </CardContent>
           </Card>
@@ -603,6 +818,12 @@ const Dashboard: React.FC = () => {
                     <span className="text-muted-foreground">Price</span>
                     <span className="font-mono">₹{latestPrediction.price.toFixed(2)}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Market Status</span>
+                    <Badge variant={isCurrentMarketOpen || isCrypto(selectedSymbol) ? "outline" : "destructive"} className="font-mono">
+                      {isCurrentMarketOpen || isCrypto(selectedSymbol) ? "OPEN" : "CLOSED"}
+                    </Badge>
+                  </div>
                   <div className="mt-4">
                     <p className="text-xs text-muted-foreground">{latestPrediction.message}</p>
                   </div>
@@ -613,23 +834,8 @@ const Dashboard: React.FC = () => {
                 </div>
               )}
               
-              {/* Manual trade buttons */}
-              <div className="grid grid-cols-2 gap-2 mt-4">
-                <Button 
-                  variant="outline" 
-                  className="border-trade-buy text-trade-buy hover:bg-trade-buy/10"
-                  onClick={() => handleManualTradeExecution('BUY')}
-                >
-                  Buy {selectedSymbol}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="border-trade-sell text-trade-sell hover:bg-trade-sell/10"
-                  onClick={() => handleManualTradeExecution('SELL')}
-                >
-                  Sell {selectedSymbol}
-                </Button>
-              </div>
+              {/* Manual trade buttons - use the function */}
+              {renderTradeButtons()}
             </CardContent>
           </Card>
         </div>
@@ -868,138 +1074,10 @@ const Dashboard: React.FC = () => {
         </Card>
         
         {/* Chart with embedded prediction */}
-        <Card className="border-border/50 bg-card/95 backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">{selectedSymbol} Chart</CardTitle>
-            {latestPrediction && (
-              <Badge variant="outline" className={`${
-                latestPrediction.action === 'BUY' 
-                  ? 'bg-trade-buy/10 text-trade-buy border-trade-buy/30' 
-                  : latestPrediction.action === 'SELL'
-                    ? 'bg-trade-sell/10 text-trade-sell border-trade-sell/30'
-                    : 'bg-muted/10 text-muted-foreground border-border'
-                }`}>
-                {latestPrediction.action} signal • {(latestPrediction.confidence * 100).toFixed(1)}% confidence
-              </Badge>
-            )}
-          </CardHeader>
-          <CardContent className="h-[400px]">
-            <div className="tradingview-widget-container w-full h-full">
-              <iframe 
-                src={getTradingViewUrl(selectedSymbol)}
-                title={`${selectedSymbol} Chart`}
-                className="w-full h-full"
-                frameBorder="0"
-                allowTransparency={true}
-              />
-            </div>
-          </CardContent>
-          {latestPrediction && (
-            <CardFooter className={`px-4 py-2 text-xs ${
-              latestPrediction.action === 'BUY' 
-                ? 'text-trade-buy' 
-                : latestPrediction.action === 'SELL'
-                  ? 'text-trade-sell'
-                  : 'text-muted-foreground'
-              }`}>
-              {latestPrediction.message}
-            </CardFooter>
-          )}
-        </Card>
-
+        {renderChart()}
+        
         {/* Manual Trading Card */}
-        <Card className="border-border/50 bg-card/95 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-lg">Manual Trading</CardTitle>
-            <CardDescription>Execute trades manually based on your own analysis</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <h3 className="text-sm font-medium mb-3">Market Orders</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button 
-                    className="w-full bg-trade-buy hover:bg-trade-buy/80"
-                    onClick={() => handleManualTradeExecution('BUY')}
-                  >
-                    BUY {selectedSymbol}
-                  </Button>
-                  <Button 
-                    className="w-full bg-trade-sell hover:bg-trade-sell/80"
-                    onClick={() => handleManualTradeExecution('SELL')}
-                  >
-                    SELL {selectedSymbol}
-                  </Button>
-                </div>
-                <div className="mt-4">
-                  <h4 className="text-sm font-medium mb-2">Order Details</h4>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Symbol:</span>
-                    <span className="font-mono">{selectedSymbol}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm mt-1">
-                    <span className="text-muted-foreground">Quantity:</span>
-                    <span className="font-mono">{tradeQuantity}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm mt-1">
-                    <span className="text-muted-foreground">Order Type:</span>
-                    <span className="font-mono">MARKET</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div>
-                <h3 className="text-sm font-medium mb-3">Current Signal</h3>
-                <div className="bg-muted/30 p-4 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-muted-foreground">AI Recommendation:</span>
-                    <span className={`font-semibold ${
-                      latestPrediction?.action === 'BUY' ? 'text-trade-buy' : 
-                      latestPrediction?.action === 'SELL' ? 'text-trade-sell' : 
-                      'text-muted-foreground'
-                    }`}>
-                      {latestPrediction?.action || 'NONE'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-muted-foreground">Confidence:</span>
-                    <span className="font-mono">
-                      {latestPrediction ? `${(latestPrediction.confidence * 100).toFixed(1)}%` : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Signal Strength:</span>
-                    <span className="font-mono">{signalStrength}%</span>
-                  </div>
-                  
-                  <Separator className="my-3" />
-                  
-                  <div className="text-xs text-muted-foreground">
-                    <p>
-                      {signalStrength > 70 ? 'Strong buy signal detected. Consider taking a long position.' : 
-                       signalStrength > 60 ? 'Moderate buy signal. The trend appears bullish.' :
-                       signalStrength < 30 ? 'Strong sell signal detected. Consider taking a short position.' :
-                       signalStrength < 40 ? 'Moderate sell signal. The trend appears bearish.' :
-                       'Neutral signal. The market is showing no clear direction.'}
-                    </p>
-                  </div>
-                </div>
-                
-                {activeTrade && (
-                  <div className="mt-4">
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={handleStopCurrentTrade}
-                    >
-                      Close {activeTrade.position} position for {activeTrade.symbol}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {renderManualTradingCard()}
         
         {/* Tabs for orders and logs */}
         <Tabs defaultValue="orders" className="w-full">
