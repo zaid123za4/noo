@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { Search, Brain } from 'lucide-react';
 import {
@@ -10,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import dhanService from '@/services/dhanService';
 import { PredictionResult } from '@/services/dhanService';
 import { getSymbolPerformance } from '@/services/tradingLearning';
@@ -126,25 +127,23 @@ const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({
                     <span>{instrument}</span>
                     <div className="flex items-center gap-2">
                       {hasLearningData && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className={`flex items-center ${
-                                hasLearningData.successRate > 0.6 
-                                  ? 'text-trade-buy' 
-                                  : hasLearningData.successRate < 0.4 
-                                    ? 'text-trade-sell' 
-                                    : 'text-muted-foreground'
-                              }`}>
-                                <Brain className="h-3.5 w-3.5" />
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>AI learning: {(hasLearningData.successRate * 100).toFixed(1)}% success rate</p>
-                              <p>Confidence adjustment: ×{hasLearningData.adjustmentFactor.toFixed(2)}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className={`flex items-center ${
+                              hasLearningData.successRate > 0.6 
+                                ? 'text-trade-buy' 
+                                : hasLearningData.successRate < 0.4 
+                                  ? 'text-trade-sell' 
+                                  : 'text-muted-foreground'
+                            }`}>
+                              <Brain className="h-3.5 w-3.5" />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>AI learning: {(hasLearningData.successRate * 100).toFixed(1)}% success rate</p>
+                            <p>Confidence adjustment: ×{hasLearningData.adjustmentFactor.toFixed(2)}</p>
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                       
                       {predictionData && selectedSymbol === instrument && (
