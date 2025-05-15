@@ -120,6 +120,19 @@ class DhanService {
     this.isLoggedIn = true; // Auto-login in demo mode
     this.mockFunds.equity.available.cash = amount;
     this.addLog(`Demo mode activated with ₹${amount.toLocaleString()} virtual funds`, 'success');
+    
+    // In demo mode, let's create a special demo user profile
+    this.mockProfile = {
+      user_id: 'DEMO123',
+      user_name: 'Demo User',
+      email: 'demo@tradingapp.com',
+      user_type: 'demo',
+      broker: 'DHAN',
+      exchanges: ['NSE', 'BSE', 'MCX'],
+      products: ['CNC', 'NRML', 'MIS'],
+      order_types: ['MARKET', 'LIMIT', 'SL', 'SL-M'],
+      avatar_url: null
+    };
   }
   
   // Check if in demo mode

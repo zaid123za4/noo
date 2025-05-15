@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,10 +21,12 @@ import { useNavigate } from 'react-router-dom';
 import InstrumentSelector from './InstrumentSelector';
 import { getSymbolPerformance, getRecentPredictions } from '@/services/tradingLearning';
 import { useTradingMode } from '@/hooks/use-trading-mode';
+import { useDemoMode } from '@/hooks/use-demo-mode';
 
 const Dashboard: React.FC = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const isDemoMode = useDemoMode();
   
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [funds, setFunds] = useState<Funds | null>(null);
@@ -66,9 +67,9 @@ const Dashboard: React.FC = () => {
     }
   });
   
-  // Check if user is logged in
+  // Check if user is logged in or in demo mode
   useEffect(() => {
-    if (!dhanService.isAuthenticated()) {
+    if (!dhanService.isAuthenticated() && !isDemoMode) {
       navigate('/');
       return;
     }
@@ -83,7 +84,7 @@ const Dashboard: React.FC = () => {
       clearInterval(refreshInterval);
       if (autoTradeInterval) clearInterval(autoTradeInterval);
     };
-  }, [navigate]);
+  }, [navigate, isDemoMode]);
   
   useEffect(() => {
     // Reload prediction when selected symbol changes
@@ -358,9 +359,16 @@ const Dashboard: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Dhan Auto Trader</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight">Dhan Auto Trader</h1>
+              {isDemoMode && (
+                <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30">
+                  Demo Mode
+                </Badge>
+              )}
+            </div>
             <p className="text-muted-foreground">
-              AI-powered trading system for Dhan
+              {isDemoMode ? 'Practice trading with virtual funds' : 'AI-powered trading system for Dhan'}
             </p>
           </div>
           
@@ -381,7 +389,16 @@ const Dashboard: React.FC = () => {
                 Close Current Position
               </Button>
             )}
-            <Button variant="outline" onClick={() => navigate('/')}>
+            <Button variant="outline" onClick={() => {
+              if (isDemoMode) {
+                // Just navigate to home, demo mode will be reset
+                navigate('/');
+              } else {
+                // Regular logout
+                dhanService.logout();
+                navigate('/');
+              }
+            }}>
               Logout
             </Button>
           </div>
@@ -399,6 +416,22 @@ const Dashboard: React.FC = () => {
                 Indian stock market trading hours are from 9:15 AM to 3:30 PM IST, Monday to Friday.
                 You can still view signals and predictions, but trades can only be executed during market hours.
                 Cryptocurrency trading is available 24/7.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Demo Mode Info Card */}
+        {isDemoMode && (
+          <Card className="border-border/50 bg-amber-500/10 backdrop-blur">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <Info className="h-5 w-5 text-amber-500" />
+                <p className="text-amber-500 font-medium">Demo Trading Active</p>
+              </div>
+              <p className="text-sm mt-2">
+                You're using a demo account with virtual funds. All trades are simulated and won't affect real money.
+                This is a safe environment to practice and learn trading strategies.
               </p>
             </CardContent>
           </Card>
@@ -472,7 +505,14 @@ const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="border-border/50 bg-card/95 backdrop-blur">
             <CardHeader>
-              <CardTitle className="text-lg">Profile</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                Profile
+                {isDemoMode && (
+                  <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-500 border-amber-500/30">
+                    Demo
+                  </Badge>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -490,7 +530,7 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Type</span>
-                  <span>{profile?.user_type}</span>
+                  <span>{profile?.user_type} {isDemoMode && "(Demo)"}</span>
                 </div>
               </div>
             </CardContent>
@@ -1138,7 +1178,9 @@ const Dashboard: React.FC = () => {
         
         <div className="text-center py-4">
           <p className="text-xs text-muted-foreground">
-            {isAutoMode ? "AI Trading Mode" : "Manual Trading Mode"} • Dhan Auto Trader • Real trades will affect your Dhan balance
+            {isAutoMode ? "AI Trading Mode" : "Manual Trading Mode"} • 
+            {isDemoMode ? " Demo Account with Virtual Funds" : " Real trades will affect your Dhan balance"} • 
+            Dhan Auto Trader
           </p>
         </div>
       </div>
