@@ -17,6 +17,13 @@ const LoginPage: React.FC = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     
+    // Check if we're in demo mode already
+    const isDemo = urlParams.get('demo') === 'true';
+    if (isDemo) {
+      navigate('/dashboard?demo=true');
+      return;
+    }
+    
     if (code) {
       handleOAuthCallback(code);
     }

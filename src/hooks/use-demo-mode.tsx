@@ -13,7 +13,7 @@ export function useDemoMode() {
     const searchParams = new URLSearchParams(location.search);
     const isDemo = searchParams.get('demo') === 'true';
     
-    if (isDemo) {
+    if (isDemo && !isDemoMode) {
       setIsDemoMode(true);
       
       // Add demo funds
@@ -25,7 +25,7 @@ export function useDemoMode() {
         description: `You're now using a demo account with ₹${demoFunds.toLocaleString()} virtual funds`,
       });
     }
-  }, [location]);
+  }, [location, isDemoMode]);
 
   return isDemoMode;
 }
