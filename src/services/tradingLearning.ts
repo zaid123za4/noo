@@ -1,4 +1,3 @@
-
 import dhanService from '@/services/dhanService';
 
 // Interface for Market Data from API
@@ -22,7 +21,7 @@ export interface PredictionResult {
   signalStrength?: number;
 }
 
-// Interface for User Profile
+// Interface for User Profile - aligning with dhanService types
 export interface UserProfile {
   user_id: string;
   user_name: string;
@@ -31,7 +30,7 @@ export interface UserProfile {
   // Add any additional fields from dhanService.UserProfile if needed
 }
 
-// Interface for Funds
+// Interface for Funds - aligning with dhanService types
 export interface Funds {
   equity: {
     available: {
@@ -45,7 +44,7 @@ export interface Funds {
   // Add any additional fields from dhanService.Funds if needed
 }
 
-// Interface for Order
+// Interface for Order - aligning with dhanService types
 export interface Order {
   id: string;
   timestamp: Date;
@@ -334,7 +333,7 @@ export async function optimizeStrategyParameters(
  * Calculate market volatility based on price data
  */
 function calculateVolatility(data: MarketData[]): number {
-  if (data.length < 5) return 0.015; // Default moderate volatility
+  if (data.length < 5) return 0.015; // Default value for brevity
   
   // Calculate returns
   const returns: number[] = [];
