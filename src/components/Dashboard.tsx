@@ -19,7 +19,7 @@ import InstrumentSelector from '@/components/InstrumentSelector';
 import { PredictionResult, UserProfile, Funds, Order, TradeLog } from '@/services/tradingLearning';
 import { runTradingStrategy } from '@/services/trading/tradingStrategy';
 import { useTradingMode } from '@/hooks/use-trading-mode';
-import { adaptUserProfile, adaptFunds, adaptOrders, isErrorInstance } from '@/utils/typeAdapters';
+import { adaptUserProfile, adaptFunds, adaptOrders, adaptTradeLogs, isErrorInstance } from '@/utils/typeAdapters';
 
 // Style constants
 const DATA_COLOR = '#8884d8';
@@ -61,8 +61,8 @@ const mockBarChartData = [
 const Dashboard = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { isDemo } = useDemoMode();
-  const { isAutomatedTrading, toggleAutomatedTrading } = useTradingMode();
+  const demoMode = useDemoMode();
+  const tradingMode = useTradingMode();
   
   const [selectedSymbol, setSelectedSymbol] = useState<string>('NIFTY');
   const [predictionData, setPredictionData] = useState<PredictionResult | null>(null);
@@ -91,7 +91,7 @@ const Dashboard = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [logs, setLogs] = useState<TradeLog[]>([]);
   
-  // Chart data
+  // Chart data state
   const [chartData, setChartData] = useState(mockChartData);
   const [lineChartData, setLineChartData] = useState(mockLineChartData);
   const [barChartData, setBarChartData] = useState(mockBarChartData);
@@ -139,23 +139,22 @@ const Dashboard = () => {
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
-        const loggedIn = await dhanService.isLoggedIn();
-        setIsLoggedIn(loggedIn);
+        // Check if user is logged in
+        const loggedIn = await Promise.resolve(dhanService.isLoggedIn);
+        setIsLoggedIn(!!loggedIn);
         
         if (loggedIn) {
           // Get user profile, funds, orders
-          const profile = await dhanService.getUserProfile();
+          const profile = await dhanService.getProfile();
           const userFunds = await dhanService.getFunds();
           const userOrders = await dhanService.getOrders();
+          const tradingLogs = await dhanService.getLogs();
           
           // Use our adapter functions to ensure type compatibility
           setUserProfile(adaptUserProfile(profile));
           setFunds(adaptFunds(userFunds));
           setOrders(adaptOrders(userOrders));
-          
-          // Get trading logs
-          const tradingLogs = await dhanService.getLogs();
-          setLogs(tradingLogs);
+          setLogs(adaptTradeLogs(tradingLogs));
         }
       } catch (error) {
         if (isErrorInstance(error)) {
@@ -312,7 +311,11 @@ const Dashboard = () => {
           <Button onClick={handleRunStrategy} disabled={strategyRunning}>
             {strategyRunning ? 'Running Strategy...' : 'Run Strategy'}
           </Button>
-          <Switch id="automated" checked={isAutomatedTrading} onCheckedChange={toggleAutomatedTrading} />
+          <Switch 
+            id="automated" 
+            checked={tradingMode.isAutoMode} 
+            onCheckedChange={tradingMode.toggleTradingMode} 
+          />
           <Label htmlFor="automated" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed">
             Automated Trading
           </Label>

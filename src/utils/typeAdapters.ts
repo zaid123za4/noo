@@ -7,10 +7,10 @@ import * as tradingTypes from '@/services/tradingLearning';
  */
 export function adaptUserProfile(profile: dhanTypes.UserProfile): tradingTypes.UserProfile {
   return {
-    user_id: profile.user_id || 'unknown',
+    user_id: profile.userId || 'unknown',
     user_name: profile.name || 'Unknown User',
     email: profile.email || 'unknown@example.com',
-    user_type: profile.user_type || 'normal'
+    user_type: profile.userType || 'normal'
   };
 }
 
@@ -21,11 +21,11 @@ export function adaptFunds(funds: dhanTypes.Funds): tradingTypes.Funds {
   return {
     equity: {
       available: {
-        cash: funds.equity?.available?.cash || 0,
-        collateral: funds.equity?.available?.collateral || 0
+        cash: funds.available?.cash || 0,
+        collateral: funds.available?.collateral || 0
       },
       utilized: {
-        m2m_unrealised: funds.equity?.utilized?.m2m_unrealised || 0
+        m2m_unrealised: funds.utilized?.m2m_unrealised || 0
       }
     }
   };
@@ -36,14 +36,25 @@ export function adaptFunds(funds: dhanTypes.Funds): tradingTypes.Funds {
  */
 export function adaptOrders(orders: dhanTypes.Order[]): tradingTypes.Order[] {
   return orders.map(order => ({
-    id: order.order_id || String(order.id) || 'unknown',
-    timestamp: new Date(order.order_timestamp || Date.now()),
-    symbol: order.symbol || 'unknown',
-    type: (order.transaction_type === 'BUY' || order.transaction_type === 'buy') ? 'BUY' : 'SELL',
+    id: order.orderId || String(Math.random()) || 'unknown',
+    timestamp: new Date(order.orderTimestamp || Date.now()),
+    symbol: order.instrumentKey || 'unknown',
+    type: (order.transactionType === 'BUY' || order.transactionType === 'buy') ? 'BUY' : 'SELL',
     price: order.price || 0,
     quantity: order.quantity || 0,
     status: order.status === 'COMPLETE' ? 'COMPLETE' : 
             order.status === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE'
+  }));
+}
+
+/**
+ * Adapts TradeLog from dhanService format to tradingLearning format
+ */
+export function adaptTradeLogs(logs: dhanTypes.TradeLog[]): tradingTypes.TradeLog[] {
+  return logs.map(log => ({
+    timestamp: new Date(log.timestamp || Date.now()),
+    message: log.message || 'Unknown log message',
+    type: log.type || 'info'
   }));
 }
 

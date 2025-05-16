@@ -1,4 +1,3 @@
-
 import dhanService from '../dhanService';
 import { MarketData, PredictionResult } from '@/services/tradingLearning';
 import { optimizeStrategyParameters } from '@/services/tradingLearning';
@@ -53,9 +52,9 @@ export async function runTradingStrategy(
       now
     );
     
-    // Convert any API-specific MarketData to our internal format if needed
+    // Convert any API-specific MarketData to our internal format
     const marketData: MarketData[] = historicalData.map(data => ({
-      timestamp: new Date(data.timestamp || data.time || Date.now()),
+      timestamp: new Date(data.date || data.time || Date.now()),
       open: data.open,
       high: data.high,
       low: data.low,

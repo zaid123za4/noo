@@ -8,7 +8,6 @@ export interface MarketData {
   low: number;
   close: number;
   volume: number;
-  time?: string | number; // Additional field for compatibility with external APIs
 }
 
 // Interface for prediction results
@@ -289,7 +288,7 @@ export async function optimizeStrategyParameters(
     
     // Convert API data to our MarketData format
     const marketData: MarketData[] = historicalData.map(data => ({
-      timestamp: new Date(data.timestamp || data.time || Date.now()),
+      timestamp: new Date(data.date || data.time || Date.now()),
       open: data.open,
       high: data.high,
       low: data.low,
@@ -371,7 +370,7 @@ export async function analyzePatterns(symbol: string): Promise<{
     
     // Convert API data to our MarketData format
     const marketData: MarketData[] = historicalData.map(data => ({
-      timestamp: new Date(data.timestamp || data.time || Date.now()),
+      timestamp: new Date(data.date || data.time || Date.now()),
       open: data.open,
       high: data.high,
       low: data.low,
