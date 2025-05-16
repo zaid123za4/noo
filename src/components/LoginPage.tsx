@@ -59,7 +59,7 @@ const LoginPage: React.FC = () => {
   const handleLogin = () => {
     setIsLoading(true);
     try {
-      // Redirect to Dhan OAuth page using the updated URL
+      // Redirect to Dhan OAuth page
       const authUrl = dhanService.getOAuthUrl();
       window.location.href = authUrl;
     } catch (error) {

@@ -1,18 +1,17 @@
 
 import { useState } from "react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "./use-toast";
 
 type TradingMode = "auto" | "manual";
 
 interface UseTradingModeProps {
-  symbol?: string;
+  symbol: string;
   onModeChange?: (mode: TradingMode) => void;
 }
 
-export function useTradingMode(props?: UseTradingModeProps) {
+export function useTradingMode({ symbol, onModeChange }: UseTradingModeProps) {
   const [mode, setMode] = useState<TradingMode>("manual");
   const { toast } = useToast();
-  const symbol = props?.symbol || 'NIFTY';
   
   const toggleTradingMode = () => {
     const newMode = mode === "auto" ? "manual" : "auto";
@@ -25,8 +24,8 @@ export function useTradingMode(props?: UseTradingModeProps) {
         : `Now in manual mode. Current positions are maintained.`,
     });
     
-    if (props?.onModeChange) {
-      props.onModeChange(newMode);
+    if (onModeChange) {
+      onModeChange(newMode);
     }
     
     return newMode;
@@ -38,8 +37,5 @@ export function useTradingMode(props?: UseTradingModeProps) {
     toggleTradingMode,
     isAutoMode: mode === "auto",
     isManualMode: mode === "manual",
-    // Add these properties to match the Dashboard usage
-    isAutomatedTrading: mode === "auto",
-    toggleAutomatedTrading: toggleTradingMode
   };
 }

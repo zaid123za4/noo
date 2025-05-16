@@ -1,70 +1,44 @@
-import dhanService from '../dhanService';
-import { MarketData, PredictionResult } from '@/services/tradingLearning';
-import { optimizeStrategyParameters } from '@/services/tradingLearning';
-import { recordPrediction } from '@/services/tradingLearning';
-import { recordOutcome, getSymbolPerformance } from '@/services/tradingLearning';
-import { isMarketOpen, isCrypto } from './utils';
-import {
-  getCurrentPosition,
-  getPositionEntryPrice,
+
+import dhanService, { MarketData, PredictionResult } from '../dhanService';
+import { 
+  recordPrediction, 
+  recordOutcome, 
+  optimizeStrategyParameters,
+  getSymbolPerformance
+} from '../tradingLearning';
+import { calculateSMA, isMarketOpen, isCrypto } from './utils';
+import { 
+  getCurrentPosition, 
+  getPositionEntryPrice, 
   updatePosition,
-  getSignalStrength,
+  clearPosition,
   updateSignalStrength,
+  getSignalStrength,
   SIGNAL_STRENGTH_THRESHOLD
 } from './positionTracker';
-
-// Helper function to calculate Simple Moving Average
-function calculateSMA(data: MarketData[], period: number): number[] {
-  const sma: number[] = [];
-  
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      sma.push(0); // Not enough data yet
-      continue;
-    }
-    
-    let sum = 0;
-    for (let j = 0; j < period; j++) {
-      sum += data[i - j].close;
-    }
-    sma.push(sum / period);
-  }
-  
-  return sma;
-}
 
 // Trading strategy using SMA crossover with position holding and signal strength
 export async function runTradingStrategy(
   symbol: string = 'NIFTY'
 ): Promise<PredictionResult> {
   try {
-    // Get optimized parameters for this symbol based on market conditions
-    const { shortSMA, longSMA, confidenceMultiplier } = await optimizeStrategyParameters(symbol);
-    
-    // Get historical data from the service
+    // Get historical data for the last 3 days with 5-minute candles
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+    const threeDaysAgo = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000));
     
     const historicalData = await dhanService.getHistoricalData(
       symbol,
-      '30minute',
-      thirtyDaysAgo,
+      '5minute',
+      threeDaysAgo,
       now
     );
     
-    // Convert any API-specific MarketData to our internal format
-    const marketData: MarketData[] = historicalData.map(data => ({
-      timestamp: new Date(data.candle_begin_time || Date.now()),
-      open: data.open,
-      high: data.high,
-      low: data.low,
-      close: data.close,
-      volume: data.volume
-    }));
+    // Optimize strategy parameters based on performance and market conditions
+    const { shortSMA, longSMA, confidenceMultiplier } = await optimizeStrategyParameters(symbol);
     
     // Calculate SMA with optimized parameters
-    const sma20 = calculateSMA(marketData, shortSMA);
-    const sma50 = calculateSMA(marketData, longSMA);
+    const sma20 = calculateSMA(historicalData, shortSMA);
+    const sma50 = calculateSMA(historicalData, longSMA);
     
     // Get the latest values
     const latestSMA20 = sma20[sma20.length - 1];
@@ -73,7 +47,7 @@ export async function runTradingStrategy(
     const previousSMA50 = sma50[sma50.length - 2];
     
     // Get the current price (latest close)
-    const currentPrice = marketData[marketData.length - 1].close;
+    const currentPrice = historicalData[historicalData.length - 1].close;
     
     // Check current position for this symbol
     const currentPosition = getCurrentPosition(symbol);
@@ -288,7 +262,7 @@ export async function runTradingStrategy(
       confidence: 0,
       timestamp: new Date(),
       price: 0,
-      message: `Error: Unknown error`,
+      message: `Error: ${(error as Error).message}`,
       signalStrength: 50
     };
   }

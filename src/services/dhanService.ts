@@ -1,64 +1,58 @@
-
 // Dhan API Service
 
 import { toast } from "@/components/ui/use-toast";
 
-// Types for the service
-export interface TradePosition {
-  symbol: string;
-  quantity: number;
-  price: number;
-  side: 'BUY' | 'SELL';
-  timestamp: string;
-  pnl: number;
-}
-
 export interface UserProfile {
-  name: string;
+  user_id: string;
+  user_name: string;
   email: string;
-  clientId: string;
-  accountType: string;
+  user_type: string;
+  broker: string;
+  exchanges: string[];
+  products: string[];
+  order_types: string[];
+  avatar_url: string | null;
 }
 
 export interface Funds {
-  availableCash: number;
-  usedMargin: number;
-  totalMargin: number;
-}
-
-export interface Security {
-  tradingSymbol: string;
-  identifier: string;
-  instrumentType: string;
-  optionType?: string;
-  strikePrice?: number;
-  expiryDate?: string;
-}
-
-export interface Order {
-  orderId: string;
-  tradingSymbol: string;
-  transactionType: 'BUY' | 'SELL';
-  quantity: number;
-  orderType: 'MARKET' | 'LIMIT';
-  price?: number;
-  status: string;
-  timestamp: string;
-}
-
-export interface TradeLog {
-  timestamp: string;
-  message: string;
-  type: 'info' | 'error' | 'trade' | 'warning' | 'success';
+  equity: {
+    available: {
+      cash: number;
+      collateral: number;
+      intraday_payin: number;
+    };
+    utilized: {
+      debits: number;
+      exposure: number;
+      m2m_realised: number;
+      m2m_unrealised: number;
+      option_premium: number;
+      payout: number;
+      span: number;
+      holding_sales: number;
+      turnover: number;
+    };
+  };
 }
 
 export interface MarketData {
-  candle_begin_time: string;
-  close: number;
+  timestamp: Date;
+  open: number;
   high: number;
   low: number;
-  open: number;
+  close: number;
   volume: number;
+}
+
+export interface Order {
+  id: string;
+  timestamp: Date;
+  symbol: string;
+  type: 'BUY' | 'SELL';
+  quantity: number;
+  price: number;
+  status: 'COMPLETE' | 'REJECTED' | 'CANCELLED' | 'PENDING' | 'ACTIVE';
+  pnl?: number;
 }
 
 export interface PredictionResult {
@@ -67,580 +61,344 @@ export interface PredictionResult {
   timestamp: Date;
   price: number;
   message: string;
-  signalStrength?: number;
+  signalStrength?: number; // Add this property
 }
 
+interface TradeLog {
+  timestamp: Date;
+  message: string;
+  type: 'info' | 'success' | 'error' | 'warning';
+}
+
+// Dhan Service for API interaction
 class DhanService {
   private isLoggedIn = false;
   private accessToken: string | null = null;
-  private clientId = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzQ5OTgyMDc0LCJ0b2tlbkNvbnN1bWVyVHlwZSI6IlNFTEYiLCJ3ZWJob29rVXJsIjoiIiwiZGhhbkNsaWVudElkIjoiMTEwMjYzNDYzNiJ9.CS7wLP0VXO-vOnr32oINIvlMU4aZVFmYzYmYQhx1HPm6UUoCmdGXbzZhtdtkuVYyl5dKh2Elq5rLQgf_LaoMXw';
-  private redirectUri = 'https://noo.lovable.app/callback';
+  private clientId = 'YOUR_CLIENT_ID'; // Replace with your actual client ID
+  private redirectUri = 'https://mytradingapp.com/callback'; // Replace with your actual redirect URI
   private tradeLogs: TradeLog[] = [];
   private orders: Order[] = [];
   private isDemoMode = false;
-  private demoFunds: number = 0;
-  private profile: UserProfile = {
-    name: '',
-    email: '',
-    clientId: '',
-    accountType: ''
+  
+  // Mock data for demonstration
+  private mockProfile: UserProfile = {
+    user_id: 'DH1234',
+    user_name: 'Demo User',
+    email: 'demo@example.com',
+    user_type: 'individual',
+    broker: 'DHAN',
+    exchanges: ['NSE', 'BSE', 'MCX'],
+    products: ['CNC', 'NRML', 'MIS'],
+    order_types: ['MARKET', 'LIMIT', 'SL', 'SL-M'],
+    avatar_url: null
   };
   
-  constructor() {
-    // Load the access token from localStorage when the service is created
-    this.accessToken = localStorage.getItem('dhan_access_token');
-    this.isLoggedIn = !!this.accessToken;
+  private mockFunds: Funds = {
+    equity: {
+      available: {
+        cash: 50000,
+        collateral: 0,
+        intraday_payin: 0,
+      },
+      utilized: {
+        debits: 0,
+        exposure: 0,
+        m2m_realised: 0,
+        m2m_unrealised: 0,
+        option_premium: 0,
+        payout: 0,
+        span: 0,
+        holding_sales: 0,
+        turnover: 0,
+      },
+    },
+  };
+
+  // Set demo mode and funds
+  addDemoFunds(amount: number): void {
+    this.isDemoMode = true;
+    this.isLoggedIn = true; // Auto-login in demo mode
+    this.mockFunds.equity.available.cash = amount;
+    this.addLog(`Demo mode activated with ₹${amount.toLocaleString()} virtual funds`, 'success');
     
-    // Initialize demo data
-    if (this.isLoggedIn) {
-      this.addLog("Logged in to Dhan service", "info");
-    }
-  }
-
-  setDemoMode(isDemo: boolean): void {
-    this.isDemoMode = isDemo;
-  }
-
-  isDemo(): boolean {
-    return this.isDemoMode;
+    // In demo mode, let's create a special demo user profile
+    this.mockProfile = {
+      user_id: 'DEMO123',
+      user_name: 'Demo User',
+      email: 'demo@tradingapp.com',
+      user_type: 'demo',
+      broker: 'DHAN',
+      exchanges: ['NSE', 'BSE', 'MCX'],
+      products: ['CNC', 'NRML', 'MIS'],
+      order_types: ['MARKET', 'LIMIT', 'SL', 'SL-M'],
+      avatar_url: null
+    };
   }
   
-  addDemoFunds(amount: number): void {
-    this.demoFunds = amount;
-    this.addLog(`Added ₹${amount.toLocaleString()} in demo funds`, "info");
+  // Check if in demo mode
+  isInDemoMode(): boolean {
+    return this.isDemoMode;
   }
 
-  async handleCallback(code: string): Promise<boolean> {
-    try {
-      const tokenResponse = await this.exchangeCodeForToken(code);
-      if (tokenResponse && tokenResponse.access_token) {
-        this.accessToken = tokenResponse.access_token;
-        localStorage.setItem('dhan_access_token', tokenResponse.access_token);
-        this.isLoggedIn = true;
-        this.addLog("Successfully authenticated with Dhan", "success");
-        return true;
-      } else {
-        console.error('Failed to retrieve access token from Dhan.');
-        this.addLog("Failed to retrieve access token from Dhan", "error");
-        return false;
-      }
-    } catch (error) {
-      console.error('Error during OAuth callback:', error);
-      this.addLog(`Error during OAuth callback: ${(error as Error).message}`, "error");
-      return false;
-    }
-  }
-
-  private async exchangeCodeForToken(code: string): Promise<{ access_token: string } | null> {
-    const tokenUrl = 'https://api.dhan.co/oauth/token';
-    const params = new URLSearchParams();
-    params.append('client_id', this.clientId);
-    params.append('redirect_uri', this.redirectUri);
-    params.append('grant_type', 'authorization_code');
-    params.append('code', code);
-
-    try {
-      const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString(),
-      });
-
-      if (!response.ok) {
-        console.error('Token exchange failed:', response.status, response.statusText);
-        return null;
-      }
-
-      const data = await response.json();
-      return { access_token: data.access_token };
-    } catch (error) {
-      console.error('Error exchanging code for token:', error);
-      return null;
-    }
-  }
-
-  isAuthenticated(): boolean {
-    return this.isLoggedIn || this.isDemoMode;
-  }
-
-  logout(): void {
-    this.accessToken = null;
-    this.isLoggedIn = false;
-    localStorage.removeItem('dhan_access_token');
-    this.addLog("Logged out from Dhan service", "info");
-  }
-
+  // Get OAuth URL for login
   getOAuthUrl(): string {
     return `https://api.dhan.co/oauth/authorize?client_id=${this.clientId}&redirect_uri=${this.redirectUri}&response_type=code&scope=read,write`;
   }
   
-  addLog(message: string, type: 'info' | 'error' | 'trade' | 'warning' | 'success' = 'info'): void {
-    const logEntry: TradeLog = {
-      timestamp: new Date().toLocaleTimeString(),
-      message: message,
-      type: type,
-    };
-    this.tradeLogs.push(logEntry);
-    console.log(`[${logEntry.timestamp}] ${message}`);
-  }
-
-  getLogs(): TradeLog[] {
-    return this.tradeLogs;
-  }
-  
-  getProfile(): UserProfile {
+  // Handle the callback from Dhan OAuth with authorization code
+  async handleCallback(code: string): Promise<boolean> {
+    // If we're in demo mode, we're already "logged in"
     if (this.isDemoMode) {
-      return {
-        name: "Demo User",
-        email: "demo@example.com",
-        clientId: "DEMO123456",
-        accountType: "Demo Account"
-      };
+      return true;
     }
-    
-    // Return demo data or fetch from API
-    return this.profile;
-  }
-  
-  getFunds(): Funds {
-    if (this.isDemoMode) {
-      return {
-        availableCash: this.demoFunds,
-        usedMargin: 0,
-        totalMargin: this.demoFunds
-      };
-    }
-    
-    // Return actual funds if available
-    return {
-      availableCash: 0,
-      usedMargin: 0,
-      totalMargin: 0
-    };
-  }
-  
-  getOrders(): Order[] {
-    return this.orders;
-  }
-  
-  async getAvailableSymbols(): Promise<{
-    stocks: string[],
-    cryptos: string[]
-  }> {
-    // Demo symbols for testing
-    return {
-      stocks: ["NIFTY", "BANKNIFTY", "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "HDFC", "LT", "SBIN"],
-      cryptos: ["BTCINR", "ETHINR", "BNBINR", "SOLINR", "DOTUSD", "ADAINR"]
-    };
-  }
-  
-  async getCurrentPrice(symbol: string): Promise<number> {
-    // In a real implementation, this would fetch from Dhan API
-    // For demo purposes, generate a random price between 90-110% of base values
-    const baseValues: Record<string, number> = {
-      "NIFTY": 22500,
-      "BANKNIFTY": 48000,
-      "RELIANCE": 2800,
-      "TCS": 3900,
-      "BTCINR": 5500000,
-      "ETHINR": 260000
-    };
-    
-    const baseValue = baseValues[symbol] || 1000;
-    const randomFactor = 0.9 + (Math.random() * 0.2); // 90-110%
-    return baseValue * randomFactor;
-  }
-
-  async getSecurityInfo(tradingSymbol: string): Promise<Security | null> {
-    if (!this.accessToken && !this.isDemoMode) {
-      console.error('Not authenticated');
-      return null;
-    }
-
-    if (this.isDemoMode) {
-      // Return demo data for testing
-      return {
-        tradingSymbol: tradingSymbol,
-        identifier: `DEMO_ID_${tradingSymbol}`,
-        instrumentType: tradingSymbol === "BTCINR" || tradingSymbol === "ETHINR" ? "CRYPTO" : "EQUITY",
-        optionType: undefined,
-        strikePrice: undefined,
-        expiryDate: undefined,
-      };
-    }
-
-    const url = `https://api.dhan.co/instruments/${tradingSymbol}`;
 
     try {
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        console.error(`Failed to fetch security info for ${tradingSymbol}:`, response.status, response.statusText);
-        return null;
-      }
-
-      const data = await response.json();
-      return {
-        tradingSymbol: data.tradingSymbol,
-        identifier: data.identifier,
-        instrumentType: data.instrumentType,
-        optionType: data.optionType,
-        strikePrice: data.strikePrice,
-        expiryDate: data.expiryDate,
-      };
+      // In a real implementation, this would exchange the authorization code for an access token
+      // by making a server-side request to Dhan's token endpoint
+      
+      // For demo purposes, we're simulating a successful token exchange
+      this.accessToken = 'mock_access_token_' + Math.random().toString(36).substring(7);
+      this.isLoggedIn = true;
+      this.addLog('Successfully logged in to Dhan', 'success');
+      
+      // Store the token in localStorage for persistence
+      localStorage.setItem('dhan_access_token', this.accessToken);
+      
+      // Fetch initial user data after successful login
+      await this.getProfile();
+      await this.getFunds();
+      
+      return true;
     } catch (error) {
-      console.error('Error fetching security info:', error);
-      return null;
+      this.addLog('Failed to log in to Dhan', 'error');
+      return false;
     }
   }
-
-  async getMargin(): Promise<Funds | null> {
-    if (!this.accessToken && !this.isDemoMode) {
-      console.error('Not authenticated');
-      return null;
+  
+  // Check if user is logged in
+  isAuthenticated(): boolean {
+    // If we're in demo mode, we're always "authenticated"
+    if (this.isDemoMode) {
+      return true;
     }
     
-    if (this.isDemoMode) {
-      return {
-        availableCash: this.demoFunds,
-        usedMargin: 0,
-        totalMargin: this.demoFunds
-      };
+    // Check if we're already logged in
+    if (this.isLoggedIn) {
+      return true;
     }
-
-    const url = 'https://api.dhan.co/api/v1/user/margin';
-
-    try {
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        console.error('Failed to fetch margin:', response.status, response.statusText);
-        return null;
-      }
-
-      const data = await response.json();
-      return {
-        availableCash: data.availableCash,
-        usedMargin: data.usedMargin,
-        totalMargin: data.netAvailableMargin,
-      };
-    } catch (error) {
-      console.error('Error fetching margin:', error);
-      return null;
+    
+    // Check if we have a stored token
+    const storedToken = localStorage.getItem('dhan_access_token');
+    if (storedToken) {
+      this.accessToken = storedToken;
+      this.isLoggedIn = true;
+      return true;
     }
+    
+    return false;
   }
-
+  
+  // Get user profile
+  async getProfile(): Promise<UserProfile> {
+    if (!this.isAuthenticated()) {
+      throw new Error('Not logged in');
+    }
+    
+    // In a real app, this would fetch profile from Dhan API
+    this.addLog('Fetched user profile', 'info');
+    return this.mockProfile;
+  }
+  
+  // Logout
+  logout(): void {
+    this.isLoggedIn = false;
+    this.accessToken = null;
+    this.isDemoMode = false;
+    localStorage.removeItem('dhan_access_token');
+    this.addLog('Logged out from Dhan', 'info');
+  }
+  
+  // Get user funds
+  async getFunds(): Promise<Funds> {
+    if (!this.isLoggedIn && !this.isDemoMode) {
+      throw new Error('Not logged in');
+    }
+    
+    // In a real app, this would fetch funds from Dhan API
+    // Simulate some random market movements
+    const randomChange = (Math.random() * 1000) - 500;
+    this.mockFunds.equity.available.cash += randomChange;
+    
+    // Sometimes show unrealized profit/loss
+    this.mockFunds.equity.utilized.m2m_unrealised = randomChange;
+    
+    this.addLog('Fetched user funds', 'info');
+    return this.mockFunds;
+  }
+  
+  // Get historical price data for a symbol
+  async getHistoricalData(
+    symbol: string, 
+    interval: string,
+    from: Date,
+    to: Date
+  ): Promise<MarketData[]> {
+    // Generate random OHLCV data for demonstration
+    const data: MarketData[] = [];
+    let basePrice = 19500; // Starting NIFTY price
+    let lastClose = basePrice;
+    
+    // Create data points with 5 minute intervals
+    const startTime = from.getTime();
+    const endTime = to.getTime();
+    const intervalMs = interval === '5minute' ? 5 * 60 * 1000 : 60 * 60 * 1000;
+    
+    for (let time = startTime; time <= endTime; time += intervalMs) {
+      // Simulate some price movement
+      const change = (Math.random() * 40) - 20;
+      const open = lastClose;
+      const close = open + change;
+      const high = Math.max(open, close) + (Math.random() * 15);
+      const low = Math.min(open, close) - (Math.random() * 15);
+      const volume = Math.floor(Math.random() * 10000) + 5000;
+      
+      data.push({
+        timestamp: new Date(time),
+        open,
+        high,
+        low,
+        close,
+        volume
+      });
+      
+      lastClose = close;
+    }
+    
+    this.addLog(`Fetched historical data for ${symbol}`, 'info');
+    return data;
+  }
+  
+  // Place an order
   async placeOrder(
-    tradingSymbol: string,
-    side: 'BUY' | 'SELL',
+    symbol: string,
+    transactionType: 'BUY' | 'SELL',
     quantity: number,
-    orderType: 'MARKET' | 'LIMIT',
+    orderType: 'MARKET' | 'LIMIT' = 'MARKET',
     price?: number
-  ): Promise<Order | null> {
-    if (!this.accessToken && !this.isDemoMode) {
-      console.error('Not authenticated');
-      return null;
+  ): Promise<Order> {
+    if (!this.isLoggedIn && !this.isDemoMode) {
+      throw new Error('Not logged in');
     }
-
-    if (this.isDemoMode) {
-      // Create mock order for demo mode
-      const currentPrice = await this.getCurrentPrice(tradingSymbol);
-      const orderId = `DEMO_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-      const order: Order = {
-        orderId: orderId,
-        tradingSymbol: tradingSymbol,
-        transactionType: side,
-        quantity: quantity,
-        orderType: orderType,
-        price: orderType === 'MARKET' ? currentPrice : price,
-        status: 'EXECUTED',
-        timestamp: new Date().toISOString(),
-      };
-      
-      // Update demo funds
-      if (side === 'BUY') {
-        const totalCost = quantity * (orderType === 'MARKET' ? currentPrice : (price || currentPrice));
-        this.demoFunds -= totalCost;
-      } else {
-        const totalValue = quantity * (orderType === 'MARKET' ? currentPrice : (price || currentPrice));
-        this.demoFunds += totalValue;
-      }
-      
-      this.orders.push(order);
-      this.addLog(`Demo order placed: ${side} ${quantity} ${tradingSymbol} at ${orderType} ${price ? price : 'market'} price`, "trade");
-      return order;
-    }
-
-    const url = 'https://api.dhan.co/api/v1/trading/orders';
-    const payload = {
-      tradingSymbol: tradingSymbol,
-      transactionType: side,
-      quantity: quantity,
-      orderType: orderType,
-      productType: 'INTRADAY',
-      price: orderType === 'LIMIT' ? price : null,
-      source: 'WEB',
+    
+    // Generate a random order ID
+    const orderId = `ORD${Math.floor(Math.random() * 100000)}`;
+    
+    // Get current price (simulated)
+    const currentPrice = symbol === 'NIFTY' 
+      ? 19500 + (Math.random() * 100) - 50
+      : symbol.startsWith('CRYPTO_') 
+        ? 10 + (Math.random() * 50000)
+        : 500 + (Math.random() * 1000);
+    
+    // Create the order
+    const order: Order = {
+      id: orderId,
+      timestamp: new Date(),
+      symbol,
+      type: transactionType,
+      quantity,
+      price: price || currentPrice,
+      status: Math.random() > 0.1 ? 'COMPLETE' : 'REJECTED' // 90% success rate
     };
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        console.error('Failed to place order:', response.status, response.statusText);
-        const errorData = await response.json();
-        console.error('Error details:', errorData);
-        toast({
-          variant: "destructive",
-          title: "Order placement failed",
-          description: `Could not place order with Dhan. ${errorData.message || 'Please check console for details.'}`,
-        });
-        return null;
+    
+    // Add to orders list
+    this.orders.push(order);
+    
+    // Log the order
+    const logType = order.status === 'COMPLETE' ? 'success' : 'error';
+    this.addLog(
+      `${order.status}: ${order.type} ${order.quantity} ${order.symbol} @ ₹${order.price.toFixed(2)}`,
+      logType
+    );
+    
+    // Update funds if order is successful
+    if (order.status === 'COMPLETE') {
+      const orderValue = order.quantity * order.price;
+      if (order.type === 'BUY') {
+        this.mockFunds.equity.available.cash -= orderValue;
+      } else {
+        this.mockFunds.equity.available.cash += orderValue;
       }
-
-      const data = await response.json();
-      const order: Order = {
-        orderId: data.orderId,
-        tradingSymbol: data.tradingSymbol,
-        transactionType: data.transactionType,
-        quantity: data.quantity,
-        orderType: data.orderType,
-        price: data.price,
-        status: data.status,
-        timestamp: new Date().toISOString(),
-      };
-      this.orders.push(order);
-      this.addLog(`Order placed: ${side} ${quantity} ${tradingSymbol} at ${orderType} ${price ? price : 'market'}`, "trade");
-      return order;
-    } catch (error) {
-      console.error('Error placing order:', error);
+      toast({
+        title: "Order Executed",
+        description: `${order.id} executed successfully`,
+      });
+    } else {
       toast({
         variant: "destructive",
-        title: "Order placement failed",
-        description: "Could not place order with Dhan. Please try again.",
+        title: "Order Rejected",
+        description: `${order.id} was rejected`,
       });
-      return null;
-    }
-  }
-
-  async getOrderBook(): Promise<Order[]> {
-    if (!this.accessToken && !this.isDemoMode) {
-      console.error('Not authenticated');
-      return [];
     }
     
-    if (this.isDemoMode) {
-      return this.orders;
-    }
-
-    const url = 'https://api.dhan.co/api/v1/trading/orders';
-
-    try {
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        console.error('Failed to fetch order book:', response.status, response.statusText);
-        return [];
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching order book:', error);
-      return [];
-    }
+    return order;
   }
-
-  async getPositions(): Promise<TradePosition[]> {
-    if (!this.accessToken && !this.isDemoMode) {
-      console.error('Not authenticated');
-      return [];
-    }
-    
-    if (this.isDemoMode) {
-      // Generate demo positions based on orders
-      const positions: Record<string, TradePosition> = {};
-      
-      for (const order of this.orders) {
-        const symbol = order.tradingSymbol;
-        
-        if (!positions[symbol]) {
-          positions[symbol] = {
-            symbol: symbol,
-            quantity: 0,
-            price: 0,
-            side: 'BUY', // default
-            timestamp: new Date().toISOString(),
-            pnl: 0
-          };
-        }
-        
-        // Update position
-        if (order.transactionType === 'BUY') {
-          positions[symbol].quantity += order.quantity;
-          positions[symbol].side = 'BUY';
-        } else {
-          positions[symbol].quantity -= order.quantity;
-          positions[symbol].side = positions[symbol].quantity > 0 ? 'BUY' : 'SELL';
-        }
-        
-        // Set average price
-        if (positions[symbol].quantity !== 0) {
-          positions[symbol].price = order.price || await this.getCurrentPrice(symbol);
-        }
-        
-        // Calculate PnL
-        const currentPrice = await this.getCurrentPrice(symbol);
-        if (positions[symbol].side === 'BUY') {
-          positions[symbol].pnl = (currentPrice - positions[symbol].price) * positions[symbol].quantity;
-        } else {
-          positions[symbol].pnl = (positions[symbol].price - currentPrice) * Math.abs(positions[symbol].quantity);
-        }
-      }
-      
-      // Return only non-zero positions
-      return Object.values(positions).filter(p => p.quantity !== 0);
-    }
-
-    const url = 'https://api.dhan.co/api/v1/trading/positions';
-
-    try {
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        console.error('Failed to fetch positions:', response.status, response.statusText);
-        return [];
-      }
-
-      const positions = await response.json();
-      return positions.map((position: any) => ({
-        symbol: position.tradingSymbol,
-        quantity: position.quantity,
-        price: position.averagePrice,
-        side: position.transactionType === 'BUY' ? 'BUY' : 'SELL',
-        timestamp: new Date().toISOString(),
-        pnl: position.pnl,
-      }));
-    } catch (error) {
-      console.error('Error fetching positions:', error);
-      return [];
-    }
+  
+  // Get trade history
+  getOrders(): Order[] {
+    return [...this.orders].sort((a, b) => 
+      b.timestamp.getTime() - a.timestamp.getTime()
+    );
   }
-
-  async getHistoricalData(
-    tradingSymbol: string,
-    interval: string,
-    startTime: string | Date,
-    endTime: string | Date
-  ): Promise<MarketData[]> {
-    // Convert Date objects to ISO strings if needed
-    const fromDate = startTime instanceof Date ? startTime.toISOString() : startTime;
-    const toDate = endTime instanceof Date ? endTime.toISOString() : endTime;
+  
+  // Add a log entry
+  addLog(message: string, type: 'info' | 'success' | 'error' | 'warning'): void {
+    this.tradeLogs.push({
+      timestamp: new Date(),
+      message,
+      type
+    });
     
-    if (!this.accessToken && !this.isDemoMode) {
-      console.error('Not authenticated');
-      return [];
-    }
-    
-    if (this.isDemoMode) {
-      // Generate mock historical data
-      const basePrice = await this.getCurrentPrice(tradingSymbol);
-      const candles: MarketData[] = [];
-      
-      // Parse dates
-      const from = typeof fromDate === 'string' ? new Date(fromDate) : fromDate;
-      const to = typeof toDate === 'string' ? new Date(toDate) : toDate;
-      
-      // Calculate interval in milliseconds
-      let intervalMs = 5 * 60 * 1000; // Default to 5min
-      if (interval === '15minute') intervalMs = 15 * 60 * 1000;
-      else if (interval === 'hour') intervalMs = 60 * 60 * 1000;
-      else if (interval === 'day') intervalMs = 24 * 60 * 60 * 1000;
-      
-      // Generate candles
-      let currentTime = new Date(from);
-      let price = basePrice * 0.95; // Start slightly below current price
-      const volatility = 0.01; // 1% volatility per candle
-      
-      while (currentTime < to) {
-        // Calculate prices with some randomness
-        const change = (Math.random() - 0.5) * 2 * volatility * price;
-        const open = price;
-        const close = open + change;
-        const high = Math.max(open, close) + (Math.random() * volatility * price);
-        const low = Math.min(open, close) - (Math.random() * volatility * price);
-        const volume = Math.floor(Math.random() * 10000) + 5000;
-        
-        candles.push({
-          candle_begin_time: currentTime.toISOString(),
-          open,
-          high,
-          low,
-          close,
-          volume
-        });
-        
-        // Set up for next candle
-        currentTime = new Date(currentTime.getTime() + intervalMs);
-        price = close;
-      }
-      
-      return candles;
-    }
-
-    const url = `https://api.dhan.co/api/v1/charts/history/${tradingSymbol}?interval=${interval}&from=${fromDate}&to=${toDate}`;
-
-    try {
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        console.error('Failed to fetch historical data:', response.status, response.statusText);
-        return [];
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching historical data:', error);
-      return [];
-    }
+    // Log to console as well
+    console.log(`[${type.toUpperCase()}] ${message}`);
   }
-
-  getTradeLogs(): TradeLog[] {
-    return this.tradeLogs;
+  
+  // Get logs
+  getLogs(): TradeLog[] {
+    return [...this.tradeLogs].sort((a, b) => 
+      b.timestamp.getTime() - a.timestamp.getTime()
+    );
+  }
+  
+  // Get available symbols
+  async getAvailableSymbols(): Promise<{stocks: string[], cryptos: string[]}> {
+    // Mock data for available tradable instruments
+    return {
+      stocks: [
+        'NIFTY', 'BANKNIFTY', 'RELIANCE', 'TCS', 'HDFC', 'INFY', 
+        'ICICIBANK', 'SBIN', 'BHARTIARTL', 'HDFCBANK',
+        'WIPRO', 'AXISBANK', 'KOTAKBANK', 'ITC', 'LT', 'MARUTI',
+        'TATASTEEL', 'HINDUNILVR', 'BAJFINANCE', 'ASIANPAINT'
+      ],
+      cryptos: [
+        'CRYPTO_BTC', 'CRYPTO_ETH', 'CRYPTO_BNB', 'CRYPTO_SOL', 
+        'CRYPTO_XRP', 'CRYPTO_ADA', 'CRYPTO_DOGE', 'CRYPTO_DOT',
+        'CRYPTO_AVAX', 'CRYPTO_MATIC'
+      ]
+    };
+  }
+  
+  // Get current price for a symbol
+  async getCurrentPrice(symbol: string): Promise<number> {
+    // Simulate getting the current price
+    return symbol === 'NIFTY' 
+      ? 19500 + (Math.random() * 100) - 50
+      : symbol.startsWith('CRYPTO_') 
+        ? 10 + (Math.random() * 50000)
+        : 500 + (Math.random() * 1000);
   }
 }
 
+// Create a singleton instance
 const dhanService = new DhanService();
 export default dhanService;

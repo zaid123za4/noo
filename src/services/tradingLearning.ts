@@ -1,66 +1,4 @@
-import dhanService from '@/services/dhanService';
-
-// Interface for Market Data from API
-export interface MarketData {
-  timestamp: Date;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-// Interface for prediction results
-export interface PredictionResult {
-  timestamp: Date;
-  action: 'BUY' | 'SELL' | 'HOLD';
-  confidence: number;
-  price: number;
-  message?: string;
-  signalStrength?: number;
-}
-
-// Interface for User Profile - aligning with dhanService types
-export interface UserProfile {
-  user_id: string;
-  user_name: string;
-  email: string;
-  user_type: string;
-  // Add any additional fields from dhanService.UserProfile if needed
-}
-
-// Interface for Funds - aligning with dhanService types
-export interface Funds {
-  equity: {
-    available: {
-      cash: number;
-      collateral: number;
-    },
-    utilized: {
-      m2m_unrealised: number;
-    }
-  }
-  // Add any additional fields from dhanService.Funds if needed
-}
-
-// Interface for Order - aligning with dhanService types
-export interface Order {
-  id: string;
-  timestamp: Date;
-  symbol: string;
-  type: 'BUY' | 'SELL';
-  price: number;
-  quantity: number;
-  status: 'ACTIVE' | 'COMPLETE' | 'CANCELLED';
-  // Add any additional fields from dhanService.Order if needed
-}
-
-// Interface for Trade Log
-export interface TradeLog {
-  timestamp: Date;
-  message: string;
-  type: string;
-}
+import dhanService, { MarketData, PredictionResult } from '@/services/dhanService';
 
 // Interface for storing prediction history
 interface PredictionHistory {
@@ -286,18 +224,8 @@ export async function optimizeStrategyParameters(
       now
     );
     
-    // Convert API data to our MarketData format
-    const marketData: MarketData[] = historicalData.map(data => ({
-      timestamp: new Date(data.candle_begin_time || Date.now()),
-      open: data.open,
-      high: data.high,
-      low: data.low,
-      close: data.close,
-      volume: data.volume
-    }));
-    
     // Check market volatility
-    const volatility = calculateVolatility(marketData);
+    const volatility = calculateVolatility(historicalData);
     
     // Adjust parameters based on volatility
     if (volatility > 0.025) { // High volatility
@@ -332,7 +260,7 @@ export async function optimizeStrategyParameters(
  * Calculate market volatility based on price data
  */
 function calculateVolatility(data: MarketData[]): number {
-  if (data.length < 5) return 0.015; // Default value for brevity
+  if (data.length < 5) return 0.015; // Default moderate volatility
   
   // Calculate returns
   const returns: number[] = [];
@@ -368,18 +296,8 @@ export async function analyzePatterns(symbol: string): Promise<{
       now
     );
     
-    // Convert API data to our MarketData format
-    const marketData: MarketData[] = historicalData.map(data => ({
-      timestamp: new Date(data.candle_begin_time || Date.now()),
-      open: data.open,
-      high: data.high,
-      low: data.low,
-      close: data.close,
-      volume: data.volume
-    }));
-    
     // Simple pattern detection (in a real system, this would be much more sophisticated)
-    const closes = marketData.map(d => d.close);
+    const closes = historicalData.map(d => d.close);
     
     // Calculate simple trend
     let upCount = 0;
