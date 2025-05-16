@@ -11,7 +11,7 @@ const NotFound: React.FC = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const errorType = urlParams.get('type') || 'not-found';
   const errorCode = urlParams.get('code') || '404';
-  const errorMessage = urlParams.get('message') || 'The page you're looking for doesn't exist or you may have entered an incorrect URL.';
+  const errorMessage = urlParams.get('message') || 'The page you\'re looking for doesn\'t exist or you may have entered an incorrect URL.';
   
   const handleRefresh = () => {
     window.location.reload();
