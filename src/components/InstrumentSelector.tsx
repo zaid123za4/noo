@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -24,9 +25,24 @@ const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({
 
   useEffect(() => {
     // Load available instruments
-    const availableInstruments = dhanService.getAvailableInstruments();
-    setInstruments(availableInstruments);
-    setFilteredInstruments(availableInstruments);
+    try {
+      // If getAvailableInstruments doesn't exist, fall back to getAvailableSymbols
+      const availableInstruments = 
+        typeof dhanService.getAvailableInstruments === 'function' 
+          ? dhanService.getAvailableInstruments() 
+          : typeof dhanService.getAvailableSymbols === 'function'
+            ? dhanService.getAvailableSymbols()
+            : ['NIFTY', 'BANKNIFTY', 'RELIANCE', 'HDFC', 'INFY']; // Default fallback values
+            
+      setInstruments(availableInstruments);
+      setFilteredInstruments(availableInstruments);
+    } catch (error) {
+      console.error('Error loading instruments:', error);
+      // Provide some default instruments as fallback
+      const defaultInstruments = ['NIFTY', 'BANKNIFTY', 'RELIANCE', 'HDFC', 'INFY'];
+      setInstruments(defaultInstruments);
+      setFilteredInstruments(defaultInstruments);
+    }
   }, []);
 
   useEffect(() => {
