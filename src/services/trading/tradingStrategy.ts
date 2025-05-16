@@ -1,7 +1,38 @@
+
 import dhanService from '../dhanService';
 import { MarketData, PredictionResult } from '@/services/tradingLearning';
 import { optimizeStrategyParameters } from '@/services/tradingLearning';
 import { recordPrediction } from '@/services/tradingLearning';
+import { recordOutcome, getSymbolPerformance } from '@/services/tradingLearning';
+import { isMarketOpen, isCrypto } from './utils';
+import {
+  getCurrentPosition,
+  getPositionEntryPrice,
+  updatePosition,
+  getSignalStrength,
+  updateSignalStrength,
+  SIGNAL_STRENGTH_THRESHOLD
+} from './positionTracker';
+
+// Helper function to calculate Simple Moving Average
+function calculateSMA(data: MarketData[], period: number): number[] {
+  const sma: number[] = [];
+  
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      sma.push(0); // Not enough data yet
+      continue;
+    }
+    
+    let sum = 0;
+    for (let j = 0; j < period; j++) {
+      sum += data[i - j].close;
+    }
+    sma.push(sum / period);
+  }
+  
+  return sma;
+}
 
 // Trading strategy using SMA crossover with position holding and signal strength
 export async function runTradingStrategy(
@@ -22,9 +53,19 @@ export async function runTradingStrategy(
       now
     );
     
+    // Convert any API-specific MarketData to our internal format if needed
+    const marketData: MarketData[] = historicalData.map(data => ({
+      timestamp: new Date(data.timestamp || data.time || Date.now()),
+      open: data.open,
+      high: data.high,
+      low: data.low,
+      close: data.close,
+      volume: data.volume
+    }));
+    
     // Calculate SMA with optimized parameters
-    const sma20 = calculateSMA(historicalData, shortSMA);
-    const sma50 = calculateSMA(historicalData, longSMA);
+    const sma20 = calculateSMA(marketData, shortSMA);
+    const sma50 = calculateSMA(marketData, longSMA);
     
     // Get the latest values
     const latestSMA20 = sma20[sma20.length - 1];
@@ -33,7 +74,7 @@ export async function runTradingStrategy(
     const previousSMA50 = sma50[sma50.length - 2];
     
     // Get the current price (latest close)
-    const currentPrice = historicalData[historicalData.length - 1].close;
+    const currentPrice = marketData[marketData.length - 1].close;
     
     // Check current position for this symbol
     const currentPosition = getCurrentPosition(symbol);

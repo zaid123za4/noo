@@ -26,16 +26,36 @@ const InstrumentSelector: React.FC<InstrumentSelectorProps> = ({
   useEffect(() => {
     // Load available instruments
     try {
-      // If getAvailableInstruments doesn't exist, fall back to getAvailableSymbols
-      const availableInstruments = 
-        typeof dhanService.getAvailableInstruments === 'function' 
-          ? dhanService.getAvailableInstruments() 
-          : typeof dhanService.getAvailableSymbols === 'function'
-            ? dhanService.getAvailableSymbols()
-            : ['NIFTY', 'BANKNIFTY', 'RELIANCE', 'HDFC', 'INFY']; // Default fallback values
-            
-      setInstruments(availableInstruments);
-      setFilteredInstruments(availableInstruments);
+      // Get available symbols from dhanService
+      const getSymbols = async () => {
+        let availableInstruments: string[] = [];
+        
+        // Check if getAvailableSymbols exists first
+        if (typeof dhanService.getAvailableSymbols === 'function') {
+          const symbols = await dhanService.getAvailableSymbols();
+          
+          // Handle different return types
+          if (Array.isArray(symbols)) {
+            availableInstruments = symbols;
+          } else if (symbols && typeof symbols === 'object') {
+            // If it returns an object with stocks and cryptos arrays
+            availableInstruments = [
+              ...(symbols.stocks || []),
+              ...(symbols.cryptos || [])
+            ];
+          }
+        }
+        
+        // If no symbols were found, use default fallback values
+        if (availableInstruments.length === 0) {
+          availableInstruments = ['NIFTY', 'BANKNIFTY', 'RELIANCE', 'HDFC', 'INFY'];
+        }
+        
+        setInstruments(availableInstruments);
+        setFilteredInstruments(availableInstruments);
+      };
+      
+      getSymbols();
     } catch (error) {
       console.error('Error loading instruments:', error);
       // Provide some default instruments as fallback

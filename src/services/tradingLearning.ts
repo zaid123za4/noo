@@ -9,6 +9,7 @@ export interface MarketData {
   low: number;
   close: number;
   volume: number;
+  time?: string | number; // Additional field for compatibility with external APIs
 }
 
 // Interface for prediction results
@@ -27,6 +28,7 @@ export interface UserProfile {
   user_name: string;
   email: string;
   user_type: string;
+  // Add any additional fields from dhanService.UserProfile if needed
 }
 
 // Interface for Funds
@@ -40,6 +42,7 @@ export interface Funds {
       m2m_unrealised: number;
     }
   }
+  // Add any additional fields from dhanService.Funds if needed
 }
 
 // Interface for Order
@@ -51,6 +54,7 @@ export interface Order {
   price: number;
   quantity: number;
   status: 'ACTIVE' | 'COMPLETE' | 'CANCELLED';
+  // Add any additional fields from dhanService.Order if needed
 }
 
 // Interface for Trade Log
@@ -284,8 +288,18 @@ export async function optimizeStrategyParameters(
       now
     );
     
+    // Convert API data to our MarketData format
+    const marketData: MarketData[] = historicalData.map(data => ({
+      timestamp: new Date(data.timestamp || data.time || Date.now()),
+      open: data.open,
+      high: data.high,
+      low: data.low,
+      close: data.close,
+      volume: data.volume
+    }));
+    
     // Check market volatility
-    const volatility = calculateVolatility(historicalData);
+    const volatility = calculateVolatility(marketData);
     
     // Adjust parameters based on volatility
     if (volatility > 0.025) { // High volatility
@@ -356,8 +370,18 @@ export async function analyzePatterns(symbol: string): Promise<{
       now
     );
     
+    // Convert API data to our MarketData format
+    const marketData: MarketData[] = historicalData.map(data => ({
+      timestamp: new Date(data.timestamp || data.time || Date.now()),
+      open: data.open,
+      high: data.high,
+      low: data.low,
+      close: data.close,
+      volume: data.volume
+    }));
+    
     // Simple pattern detection (in a real system, this would be much more sophisticated)
-    const closes = historicalData.map(d => d.close);
+    const closes = marketData.map(d => d.close);
     
     // Calculate simple trend
     let upCount = 0;
