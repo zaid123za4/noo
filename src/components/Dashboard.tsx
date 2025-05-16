@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import dhanService, { UserProfile, Funds, Order, PredictionResult } from '@/services/dhanService';
+import dhanService from '@/services/dhanService';
+import { UserProfile, Funds, Order, PredictionResult, TradeLog } from '@/services/tradingLearning';
 import { ArrowDown, ArrowUp, Clock, History, Info, AlertTriangle, Brain, PauseCircle, StopCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +37,7 @@ const Dashboard: React.FC = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [funds, setFunds] = useState<Funds | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [logs, setLogs] = useState<{ timestamp: Date; message: string; type: string; }[]>([]);
+  const [logs, setLogs] = useState<TradeLog[]>([]);
   const [latestPrediction, setLatestPrediction] = useState<PredictionResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [autoTradeActive, setAutoTradeActive] = useState(false);
@@ -149,6 +150,7 @@ const Dashboard: React.FC = () => {
     }
   }, [orders, selectedSymbol]);
   
+  // Load the data
   const loadData = async () => {
     try {
       setLoading(true);
@@ -160,7 +162,13 @@ const Dashboard: React.FC = () => {
       setProfile(profileData);
       setFunds(fundsData);
       setOrders(orderData);
-      setLogs(logData);
+      
+      // Convert string timestamps to Date objects if needed
+      const formattedLogs = logData.map(log => ({
+        ...log,
+        timestamp: log.timestamp instanceof Date ? log.timestamp : new Date(log.timestamp)
+      }));
+      setLogs(formattedLogs);
       
       if (selectedSymbol) {
         await loadPredictionForSymbol(selectedSymbol);

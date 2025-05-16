@@ -1,40 +1,26 @@
-
-import dhanService, { MarketData, PredictionResult } from '../dhanService';
-import { 
-  recordPrediction, 
-  recordOutcome, 
-  optimizeStrategyParameters,
-  getSymbolPerformance
-} from '../tradingLearning';
-import { calculateSMA, isMarketOpen, isCrypto } from './utils';
-import { 
-  getCurrentPosition, 
-  getPositionEntryPrice, 
-  updatePosition,
-  clearPosition,
-  updateSignalStrength,
-  getSignalStrength,
-  SIGNAL_STRENGTH_THRESHOLD
-} from './positionTracker';
+import dhanService from '../dhanService';
+import { MarketData, PredictionResult } from '@/services/tradingLearning';
+import { optimizeStrategyParameters } from '@/services/tradingLearning';
+import { recordPrediction } from '@/services/tradingLearning';
 
 // Trading strategy using SMA crossover with position holding and signal strength
 export async function runTradingStrategy(
   symbol: string = 'NIFTY'
 ): Promise<PredictionResult> {
   try {
-    // Get historical data for the last 3 days with 5-minute candles
+    // Get optimized parameters for this symbol based on market conditions
+    const { shortSMA, longSMA, confidenceMultiplier } = await optimizeStrategyParameters(symbol);
+    
+    // Get historical data from the service
     const now = new Date();
-    const threeDaysAgo = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000));
+    const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
     
     const historicalData = await dhanService.getHistoricalData(
       symbol,
-      '5minute',
-      threeDaysAgo,
+      '30minute',
+      thirtyDaysAgo,
       now
     );
-    
-    // Optimize strategy parameters based on performance and market conditions
-    const { shortSMA, longSMA, confidenceMultiplier } = await optimizeStrategyParameters(symbol);
     
     // Calculate SMA with optimized parameters
     const sma20 = calculateSMA(historicalData, shortSMA);

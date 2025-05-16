@@ -1,4 +1,64 @@
-import dhanService, { MarketData, PredictionResult } from '@/services/dhanService';
+
+import dhanService from '@/services/dhanService';
+
+// Interface for Market Data from API
+export interface MarketData {
+  timestamp: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+// Interface for prediction results
+export interface PredictionResult {
+  timestamp: Date;
+  action: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;
+  price: number;
+  message?: string;
+  signalStrength?: number;
+}
+
+// Interface for User Profile
+export interface UserProfile {
+  user_id: string;
+  user_name: string;
+  email: string;
+  user_type: string;
+}
+
+// Interface for Funds
+export interface Funds {
+  equity: {
+    available: {
+      cash: number;
+      collateral: number;
+    },
+    utilized: {
+      m2m_unrealised: number;
+    }
+  }
+}
+
+// Interface for Order
+export interface Order {
+  id: string;
+  timestamp: Date;
+  symbol: string;
+  type: 'BUY' | 'SELL';
+  price: number;
+  quantity: number;
+  status: 'ACTIVE' | 'COMPLETE' | 'CANCELLED';
+}
+
+// Interface for Trade Log
+export interface TradeLog {
+  timestamp: Date;
+  message: string;
+  type: string;
+}
 
 // Interface for storing prediction history
 interface PredictionHistory {
