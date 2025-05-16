@@ -54,7 +54,7 @@ export async function runTradingStrategy(
     
     // Convert any API-specific MarketData to our internal format
     const marketData: MarketData[] = historicalData.map(data => ({
-      timestamp: new Date(data.date || data.time || Date.now()),
+      timestamp: new Date(data.candle_begin_time || Date.now()),
       open: data.open,
       high: data.high,
       low: data.low,
@@ -288,7 +288,7 @@ export async function runTradingStrategy(
       confidence: 0,
       timestamp: new Date(),
       price: 0,
-      message: `Error: ${(error as Error).message}`,
+      message: `Error: Unknown error`,
       signalStrength: 50
     };
   }

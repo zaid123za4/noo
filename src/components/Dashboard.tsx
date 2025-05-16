@@ -61,8 +61,8 @@ const mockBarChartData = [
 const Dashboard = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const demoMode = useDemoMode();
-  const tradingMode = useTradingMode();
+  const { isDemoMode } = useDemoMode();
+  const { mode, isAutoMode, toggleTradingMode } = useTradingMode();
   
   const [selectedSymbol, setSelectedSymbol] = useState<string>('NIFTY');
   const [predictionData, setPredictionData] = useState<PredictionResult | null>(null);
@@ -140,7 +140,7 @@ const Dashboard = () => {
     const checkLoginStatus = async () => {
       try {
         // Check if user is logged in
-        const loggedIn = await Promise.resolve(dhanService.isLoggedIn);
+        const loggedIn = await Promise.resolve(dhanService.isAuthenticated());
         setIsLoggedIn(!!loggedIn);
         
         if (loggedIn) {
@@ -239,7 +239,7 @@ const Dashboard = () => {
   // Render functions for charts
   const renderAreaChart = () => (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <AreaChart data={isDemo ? generateRandomChartData(7) : chartData}
+      <AreaChart data={isDemoMode ? generateRandomChartData(7) : chartData}
                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
         <CartesianGrid stroke={GRID_COLOR} />
         <XAxis dataKey="name" />
@@ -252,7 +252,7 @@ const Dashboard = () => {
   
   const renderLineChart = () => (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <LineChart data={isDemo ? generateRandomLineChartData(7) : lineChartData}
+      <LineChart data={isDemoMode ? generateRandomLineChartData(7) : lineChartData}
                  margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
         <CartesianGrid stroke={GRID_COLOR} />
         <XAxis dataKey="name" />
@@ -266,7 +266,7 @@ const Dashboard = () => {
   
   const renderBarChart = () => (
     <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-      <BarChart data={isDemo ? generateRandomBarChartData(7) : barChartData}
+      <BarChart data={isDemoMode ? generateRandomBarChartData(7) : barChartData}
                 margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
         <CartesianGrid stroke={GRID_COLOR} />
         <XAxis dataKey="name" />
@@ -313,8 +313,8 @@ const Dashboard = () => {
           </Button>
           <Switch 
             id="automated" 
-            checked={tradingMode.isAutoMode} 
-            onCheckedChange={tradingMode.toggleTradingMode} 
+            checked={isAutoMode} 
+            onCheckedChange={toggleTradingMode} 
           />
           <Label htmlFor="automated" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed">
             Automated Trading

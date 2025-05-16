@@ -288,7 +288,7 @@ export async function optimizeStrategyParameters(
     
     // Convert API data to our MarketData format
     const marketData: MarketData[] = historicalData.map(data => ({
-      timestamp: new Date(data.date || data.time || Date.now()),
+      timestamp: new Date(data.candle_begin_time || Date.now()),
       open: data.open,
       high: data.high,
       low: data.low,
@@ -370,7 +370,7 @@ export async function analyzePatterns(symbol: string): Promise<{
     
     // Convert API data to our MarketData format
     const marketData: MarketData[] = historicalData.map(data => ({
-      timestamp: new Date(data.date || data.time || Date.now()),
+      timestamp: new Date(data.candle_begin_time || Date.now()),
       open: data.open,
       high: data.high,
       low: data.low,

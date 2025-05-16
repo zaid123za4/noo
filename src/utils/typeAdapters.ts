@@ -7,10 +7,10 @@ import * as tradingTypes from '@/services/tradingLearning';
  */
 export function adaptUserProfile(profile: dhanTypes.UserProfile): tradingTypes.UserProfile {
   return {
-    user_id: profile.userId || 'unknown',
+    user_id: profile.clientId || 'unknown',
     user_name: profile.name || 'Unknown User',
     email: profile.email || 'unknown@example.com',
-    user_type: profile.userType || 'normal'
+    user_type: profile.accountType || 'normal'
   };
 }
 
@@ -21,11 +21,11 @@ export function adaptFunds(funds: dhanTypes.Funds): tradingTypes.Funds {
   return {
     equity: {
       available: {
-        cash: funds.available?.cash || 0,
-        collateral: funds.available?.collateral || 0
+        cash: funds.availableCash || 0,
+        collateral: 0
       },
       utilized: {
-        m2m_unrealised: funds.utilized?.m2m_unrealised || 0
+        m2m_unrealised: funds.usedMargin || 0
       }
     }
   };
@@ -37,9 +37,9 @@ export function adaptFunds(funds: dhanTypes.Funds): tradingTypes.Funds {
 export function adaptOrders(orders: dhanTypes.Order[]): tradingTypes.Order[] {
   return orders.map(order => ({
     id: order.orderId || String(Math.random()) || 'unknown',
-    timestamp: new Date(order.orderTimestamp || Date.now()),
-    symbol: order.instrumentKey || 'unknown',
-    type: (order.transactionType === 'BUY' || order.transactionType === 'buy') ? 'BUY' : 'SELL',
+    timestamp: new Date(order.timestamp || Date.now()),
+    symbol: order.tradingSymbol || 'unknown',
+    type: (order.transactionType === 'BUY' || order.transactionType.toLowerCase() === 'buy') ? 'BUY' : 'SELL',
     price: order.price || 0,
     quantity: order.quantity || 0,
     status: order.status === 'COMPLETE' ? 'COMPLETE' : 

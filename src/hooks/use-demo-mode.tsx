@@ -27,5 +27,5 @@ export function useDemoMode() {
     }
   }, [location, isDemoMode]);
 
-  return isDemoMode;
+  return { isDemoMode };
 }
