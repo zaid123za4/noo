@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
+import Callback from "./components/Callback";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +20,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/admin-panel" element={<AdminPanel />} />
+          <Route path="/callback" element={<Callback />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         <Toaster />
