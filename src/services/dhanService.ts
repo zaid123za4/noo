@@ -1,4 +1,3 @@
-
 // Dhan API Service
 
 import { toast } from "@/components/ui/use-toast";
@@ -450,6 +449,26 @@ class DhanService {
     
     this.addLog(`Fetched historical data for ${symbol}`, 'info');
     return data;
+  }
+  
+  // Add placeholder OAuth methods (no longer needed for functionality but referenced in code)
+  public getOAuthUrl(): string {
+    // Since we're not using OAuth anymore, just return a dummy URL
+    // This method is only here to prevent TypeScript errors
+    this.addLog("OAuth flow no longer used - using static token instead", "info");
+    return "#";
+  }
+  
+  public handleCallback(code: string): Promise<boolean> {
+    // Since we're not using OAuth anymore, just return success
+    // This method is only here to prevent TypeScript errors
+    this.addLog("OAuth callback handling skipped - using static token", "info");
+    return Promise.resolve(true);
+  }
+  
+  public logout(): void {
+    // Since we're not using OAuth login/logout, this is just a placeholder
+    this.addLog("Logout requested (no action needed - using static token)", "info");
   }
 }
 
