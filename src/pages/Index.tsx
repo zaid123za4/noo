@@ -16,11 +16,10 @@ const Index: React.FC = () => {
     // Check URL for demo parameter
     const urlParams = new URLSearchParams(window.location.search);
     const isDemo = urlParams.get('demo') === 'true';
-    const isReal = urlParams.get('real') === 'true';
     
     if (isDemo) {
       // If demo parameter is present, redirect to dashboard with demo mode
-      navigate(`/dashboard?demo=true${isReal ? '&real=true' : ''}`);
+      navigate('/dashboard?demo=true');
     }
   }, [navigate]);
   

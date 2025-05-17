@@ -11,14 +11,9 @@ import {
 import { recordOutcome } from '../tradingLearning';
 import { toast } from "@/components/ui/use-toast";
 
-// Track auto trading intervals for different assets
-const autoTradeIntervals: Record<string, NodeJS.Timeout | null> = {
-  'CRYPTO_BTC': null
-};
-
 // Execute trades based on the trading strategy
 export async function autoTradeExecutor(
-  symbol: string = 'CRYPTO_BTC', // Default to Bitcoin trading
+  symbol: string = 'NIFTY',
   quantity: number = 1
 ): Promise<void> {
   try {
@@ -43,10 +38,7 @@ export async function autoTradeExecutor(
         return;
       }
       
-      // For Bitcoin, we want to be more aggressive with trades
-      const confidenceThreshold = symbol === 'CRYPTO_BTC' ? 0.6 : 0.7;
-      
-      if (prediction.confidence >= confidenceThreshold) {
+      if (prediction.confidence >= 0.7) {
         // Confidence is high enough for automatic execution
         dhanService.addLog(
           `Auto-executing ${prediction.action} order for ${quantity} ${symbol} @ ₹${prediction.price.toFixed(2)} (confidence: ${(prediction.confidence * 100).toFixed(1)}%)`,
@@ -58,14 +50,8 @@ export async function autoTradeExecutor(
           symbol,
           prediction.action as 'BUY' | 'SELL', // Type assertion needed since we've checked action !== 'HOLD'
           quantity,
-          'MARKET',
-          true  // Flag to indicate AI-initiated trade
+          'MARKET'
         );
-        
-        toast({
-          title: "AI Trade Executed",
-          description: `${prediction.action} ${quantity} ${symbol} @ ₹${prediction.price.toFixed(2)}`,
-        });
       } else {
         // Confidence is too low, manual approval needed
         dhanService.addLog(
@@ -85,106 +71,6 @@ export async function autoTradeExecutor(
       'error'
     );
   }
-}
-
-// Run the Bitcoin trading strategy at regular intervals
-export function startBitcoinAutoTrading(intervalMinutes: number = 5): void {
-  if (autoTradeIntervals['CRYPTO_BTC']) {
-    clearInterval(autoTradeIntervals['CRYPTO_BTC']);
-  }
-  
-  // Execute immediately once
-  autoTradeExecutor('CRYPTO_BTC');
-  
-  // Then set interval
-  autoTradeIntervals['CRYPTO_BTC'] = setInterval(() => {
-    autoTradeExecutor('CRYPTO_BTC');
-  }, intervalMinutes * 60 * 1000);
-  
-  dhanService.addLog(
-    `Bitcoin auto-trading started with ${intervalMinutes} minute intervals`,
-    'info'
-  );
-  
-  toast({
-    title: "Bitcoin Auto-Trading Activated",
-    description: `AI will trade BTC every ${intervalMinutes} minutes`,
-  });
-  
-  // Update the status in dhanService
-  dhanService.setAutoTradingStatus('CRYPTO_BTC', true);
-}
-
-export function stopBitcoinAutoTrading(): void {
-  if (autoTradeIntervals['CRYPTO_BTC']) {
-    clearInterval(autoTradeIntervals['CRYPTO_BTC']);
-    autoTradeIntervals['CRYPTO_BTC'] = null;
-    
-    dhanService.addLog('Bitcoin auto-trading stopped', 'info');
-    
-    toast({
-      title: "Bitcoin Auto-Trading Stopped",
-      description: "AI trading for BTC has been deactivated",
-    });
-    
-    // Update the status in dhanService
-    dhanService.setAutoTradingStatus('CRYPTO_BTC', false);
-  }
-}
-
-// New functions to start/stop auto trading for any asset
-export function startAssetAutoTrading(symbol: string, intervalMinutes: number = 15): void {
-  // Don't allow duplicate intervals
-  if (autoTradeIntervals[symbol]) {
-    clearInterval(autoTradeIntervals[symbol]);
-  }
-  
-  // Execute immediately once
-  autoTradeExecutor(symbol);
-  
-  // Then set interval - use longer intervals for non-crypto assets
-  autoTradeIntervals[symbol] = setInterval(() => {
-    autoTradeExecutor(symbol);
-  }, intervalMinutes * 60 * 1000);
-  
-  dhanService.addLog(
-    `Auto-trading for ${symbol} started with ${intervalMinutes} minute intervals`,
-    'info'
-  );
-  
-  toast({
-    title: `${symbol} Auto-Trading Activated`,
-    description: `AI will trade ${symbol} every ${intervalMinutes} minutes`,
-  });
-  
-  // Update the status in dhanService
-  dhanService.setAutoTradingStatus(symbol, true);
-}
-
-export function stopAssetAutoTrading(symbol: string): void {
-  if (autoTradeIntervals[symbol]) {
-    clearInterval(autoTradeIntervals[symbol]);
-    autoTradeIntervals[symbol] = null;
-    
-    dhanService.addLog(`Auto-trading for ${symbol} stopped`, 'info');
-    
-    toast({
-      title: `${symbol} Auto-Trading Stopped`,
-      description: `AI trading for ${symbol} has been deactivated`,
-    });
-    
-    // Update the status in dhanService
-    dhanService.setAutoTradingStatus(symbol, false);
-  }
-}
-
-export function isBitcoinAutoTradingActive(): boolean {
-  return autoTradeIntervals['CRYPTO_BTC'] !== null;
-}
-
-// Check if any asset is being auto-traded
-export function isAssetAutoTradingActive(symbol: string): boolean {
-  return autoTradeIntervals[symbol] !== null;
 }
 
 // New function to run the strategy on all available symbols

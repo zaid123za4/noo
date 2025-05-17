@@ -35,22 +35,6 @@ export interface Funds {
   };
 }
 
-export interface WalletInfo {
-  address: string;
-  balance: number;
-  transactions: WalletTransaction[];
-  connected: boolean;
-}
-
-export interface WalletTransaction {
-  id: string;
-  timestamp: Date;
-  type: 'DEPOSIT' | 'WITHDRAWAL' | 'TRADE';
-  amount: number;
-  status: 'COMPLETED' | 'PENDING' | 'FAILED';
-  description: string;
-}
-
 export interface MarketData {
   timestamp: Date;
   open: number;
@@ -69,7 +53,6 @@ export interface Order {
   price: number;
   status: 'COMPLETE' | 'REJECTED' | 'CANCELLED' | 'PENDING' | 'ACTIVE';
   pnl?: number;
-  aiInitiated?: boolean;
 }
 
 export interface PredictionResult {
@@ -78,7 +61,7 @@ export interface PredictionResult {
   timestamp: Date;
   price: number;
   message: string;
-  signalStrength?: number;
+  signalStrength?: number; // Add this property
 }
 
 interface TradeLog {
@@ -96,13 +79,6 @@ class DhanService {
   private tradeLogs: TradeLog[] = [];
   private orders: Order[] = [];
   private isDemoMode = false;
-  private isUsingRealMoney = false;
-  private wallet: WalletInfo = {
-    address: '0x89e51fA8C39B10000f57DcDAf41c3Fa4C0768e26',
-    balance: 0,
-    transactions: [],
-    connected: false
-  };
   
   // Mock data for demonstration
   private mockProfile: UserProfile = {
@@ -157,130 +133,6 @@ class DhanService {
       order_types: ['MARKET', 'LIMIT', 'SL', 'SL-M'],
       avatar_url: null
     };
-    
-    // Also initialize the wallet with demo funds
-    this.wallet.balance = amount / 10; // 10% of demo funds in wallet
-    this.wallet.connected = true;
-    
-    this.addLog(`Demo wallet initialized with ₹${this.wallet.balance.toLocaleString()}`, 'success');
-  }
-  
-  // Set real money mode
-  setRealMoneyMode(enabled: boolean): void {
-    this.isUsingRealMoney = enabled;
-    
-    if (enabled) {
-      this.addLog('Real money trading activated. Using actual funds for trades.', 'warning');
-      
-      // Connect wallet when using real money
-      this.wallet.connected = true;
-      
-      // In a real app, this would fetch actual wallet balance
-      // For demo, we'll just set a random amount
-      if (this.wallet.balance === 0) {
-        this.wallet.balance = Math.floor(Math.random() * 50000) + 10000;
-      }
-    } else {
-      this.addLog('Switched to virtual trading. No real funds will be used.', 'info');
-    }
-  }
-  
-  // Check if using real money
-  isUsingRealFunds(): boolean {
-    return this.isUsingRealMoney;
-  }
-  
-  // Get wallet info
-  getWalletInfo(): WalletInfo {
-    return {...this.wallet};
-  }
-  
-  // Add funds to wallet
-  depositToWallet(amount: number): WalletTransaction {
-    this.wallet.balance += amount;
-    
-    const transaction: WalletTransaction = {
-      id: `TX${Math.floor(Math.random() * 1000000)}`,
-      timestamp: new Date(),
-      type: 'DEPOSIT',
-      amount: amount,
-      status: 'COMPLETED',
-      description: `Deposit to trading wallet`
-    };
-    
-    this.wallet.transactions.push(transaction);
-    this.addLog(`₹${amount.toLocaleString()} deposited to wallet`, 'success');
-    
-    return transaction;
-  }
-  
-  // Withdraw funds from wallet
-  withdrawFromWallet(amount: number): WalletTransaction | null {
-    if (amount > this.wallet.balance) {
-      this.addLog(`Withdrawal failed: Insufficient balance`, 'error');
-      return null;
-    }
-    
-    this.wallet.balance -= amount;
-    
-    const transaction: WalletTransaction = {
-      id: `TX${Math.floor(Math.random() * 1000000)}`,
-      timestamp: new Date(),
-      type: 'WITHDRAWAL',
-      amount: amount,
-      status: 'COMPLETED',
-      description: `Withdrawal from trading wallet`
-    };
-    
-    this.wallet.transactions.push(transaction);
-    this.addLog(`₹${amount.toLocaleString()} withdrawn from wallet`, 'success');
-    
-    return transaction;
-  }
-  
-  // Connect wallet
-  connectWallet(): boolean {
-    if (this.wallet.connected) {
-      this.addLog('Wallet already connected', 'info');
-      return true;
-    }
-    
-    // In a real app, this would open a wallet connection dialog
-    this.wallet.connected = true;
-    
-    // For demo purposes, set a random balance if not already set
-    if (this.wallet.balance === 0) {
-      this.wallet.balance = Math.floor(Math.random() * 50000) + 10000;
-    }
-    
-    this.addLog('Wallet connected successfully', 'success');
-    return true;
-  }
-  
-  // Disconnect wallet
-  disconnectWallet(): boolean {
-    if (!this.wallet.connected) {
-      this.addLog('No wallet is connected', 'info');
-      return true;
-    }
-    
-    this.wallet.connected = false;
-    
-    // Turn off real money trading when wallet is disconnected
-    if (this.isUsingRealMoney) {
-      this.isUsingRealMoney = false;
-      this.addLog('Real money trading disabled due to wallet disconnection', 'warning');
-    }
-    
-    this.addLog('Wallet disconnected', 'success');
-    return true;
-  }
-  
-  // Get wallet transaction history
-  getWalletTransactions(): WalletTransaction[] {
-    return [...this.wallet.transactions].sort((a, b) => 
-      b.timestamp.getTime() - a.timestamp.getTime()
-    );
   }
   
   // Check if in demo mode
@@ -323,17 +175,6 @@ class DhanService {
     }
   }
   
-  // Logout
-  logout(): void {
-    this.isLoggedIn = false;
-    this.accessToken = null;
-    this.isDemoMode = false;
-    this.isUsingRealMoney = false;
-    this.wallet.connected = false;
-    localStorage.removeItem('dhan_access_token');
-    this.addLog('Logged out from Dhan', 'info');
-  }
-  
   // Check if user is logged in
   isAuthenticated(): boolean {
     // If we're in demo mode, we're always "authenticated"
@@ -368,6 +209,15 @@ class DhanService {
     return this.mockProfile;
   }
   
+  // Logout
+  logout(): void {
+    this.isLoggedIn = false;
+    this.accessToken = null;
+    this.isDemoMode = false;
+    localStorage.removeItem('dhan_access_token');
+    this.addLog('Logged out from Dhan', 'info');
+  }
+  
   // Get user funds
   async getFunds(): Promise<Funds> {
     if (!this.isLoggedIn && !this.isDemoMode) {
@@ -395,14 +245,7 @@ class DhanService {
   ): Promise<MarketData[]> {
     // Generate random OHLCV data for demonstration
     const data: MarketData[] = [];
-    
-    // Special handling for Bitcoin
-    let basePrice = symbol === 'CRYPTO_BTC' ? 
-      3500000 : // ~$42K in INR
-      symbol === 'NIFTY' ? 
-        19500 : // Starting NIFTY price
-        500; // Generic stock price
-    
+    let basePrice = 19500; // Starting NIFTY price
     let lastClose = basePrice;
     
     // Create data points with 5 minute intervals
@@ -410,16 +253,13 @@ class DhanService {
     const endTime = to.getTime();
     const intervalMs = interval === '5minute' ? 5 * 60 * 1000 : 60 * 60 * 1000;
     
-    // For Bitcoin, make price movements more volatile
-    const volatilityFactor = symbol === 'CRYPTO_BTC' ? 3 : 1;
-    
     for (let time = startTime; time <= endTime; time += intervalMs) {
       // Simulate some price movement
-      const change = ((Math.random() * 40) - 20) * volatilityFactor;
+      const change = (Math.random() * 40) - 20;
       const open = lastClose;
       const close = open + change;
-      const high = Math.max(open, close) + (Math.random() * 15) * volatilityFactor;
-      const low = Math.min(open, close) - (Math.random() * 15) * volatilityFactor;
+      const high = Math.max(open, close) + (Math.random() * 15);
+      const low = Math.min(open, close) - (Math.random() * 15);
       const volume = Math.floor(Math.random() * 10000) + 5000;
       
       data.push({
@@ -444,7 +284,6 @@ class DhanService {
     transactionType: 'BUY' | 'SELL',
     quantity: number,
     orderType: 'MARKET' | 'LIMIT' = 'MARKET',
-    aiInitiated: boolean = false,
     price?: number
   ): Promise<Order> {
     if (!this.isLoggedIn && !this.isDemoMode) {
@@ -457,11 +296,9 @@ class DhanService {
     // Get current price (simulated)
     const currentPrice = symbol === 'NIFTY' 
       ? 19500 + (Math.random() * 100) - 50
-      : symbol === 'CRYPTO_BTC'
-        ? 3500000 + (Math.random() * 100000) - 50000
-        : symbol.startsWith('CRYPTO_') 
-          ? 10 + (Math.random() * 50000)
-          : 500 + (Math.random() * 1000);
+      : symbol.startsWith('CRYPTO_') 
+        ? 10 + (Math.random() * 50000)
+        : 500 + (Math.random() * 1000);
     
     // Create the order
     const order: Order = {
@@ -471,8 +308,7 @@ class DhanService {
       type: transactionType,
       quantity,
       price: price || currentPrice,
-      status: Math.random() > 0.1 ? 'COMPLETE' : 'REJECTED', // 90% success rate
-      aiInitiated
+      status: Math.random() > 0.1 ? 'COMPLETE' : 'REJECTED' // 90% success rate
     };
     
     // Add to orders list
@@ -481,72 +317,26 @@ class DhanService {
     // Log the order
     const logType = order.status === 'COMPLETE' ? 'success' : 'error';
     this.addLog(
-      `${order.status}: ${order.type} ${order.quantity} ${order.symbol} @ ₹${order.price.toFixed(2)}${aiInitiated ? ' (AI Initiated)' : ''}`,
+      `${order.status}: ${order.type} ${order.quantity} ${order.symbol} @ ₹${order.price.toFixed(2)}`,
       logType
     );
     
     // Update funds if order is successful
     if (order.status === 'COMPLETE') {
       const orderValue = order.quantity * order.price;
-      
-      // If using real money, use the wallet balance
-      if (this.isUsingRealMoney && this.wallet.connected) {
-        if (order.type === 'BUY') {
-          if (this.wallet.balance >= orderValue) {
-            this.wallet.balance -= orderValue;
-            
-            // Create wallet transaction
-            const transaction: WalletTransaction = {
-              id: `TX${Math.floor(Math.random() * 1000000)}`,
-              timestamp: new Date(),
-              type: 'TRADE',
-              amount: orderValue,
-              status: 'COMPLETED',
-              description: `${order.type} ${order.quantity} ${order.symbol} @ ₹${order.price.toFixed(2)}`
-            };
-            this.wallet.transactions.push(transaction);
-          } else {
-            order.status = 'REJECTED';
-            this.addLog(`Order rejected: Insufficient wallet balance`, 'error');
-            toast({
-              variant: "destructive",
-              title: "Order Rejected",
-              description: `Insufficient wallet balance for ${order.id}`,
-            });
-            return order;
-          }
-        } else {
-          // For selling, add to wallet balance
-          this.wallet.balance += orderValue;
-          
-          // Create wallet transaction
-          const transaction: WalletTransaction = {
-            id: `TX${Math.floor(Math.random() * 1000000)}`,
-            timestamp: new Date(),
-            type: 'TRADE',
-            amount: orderValue,
-            status: 'COMPLETED',
-            description: `${order.type} ${order.quantity} ${order.symbol} @ ₹${order.price.toFixed(2)}`
-          };
-          this.wallet.transactions.push(transaction);
-        }
+      if (order.type === 'BUY') {
+        this.mockFunds.equity.available.cash -= orderValue;
       } else {
-        // Using virtual money in account
-        if (order.type === 'BUY') {
-          this.mockFunds.equity.available.cash -= orderValue;
-        } else {
-          this.mockFunds.equity.available.cash += orderValue;
-        }
+        this.mockFunds.equity.available.cash += orderValue;
       }
-      
       toast({
-        title: aiInitiated ? "AI Order Executed" : "Order Executed",
+        title: "Order Executed",
         description: `${order.id} executed successfully`,
       });
     } else {
       toast({
         variant: "destructive",
-        title: aiInitiated ? "AI Order Rejected" : "Order Rejected",
+        title: "Order Rejected",
         description: `${order.id} was rejected`,
       });
     }
@@ -559,13 +349,6 @@ class DhanService {
     return [...this.orders].sort((a, b) => 
       b.timestamp.getTime() - a.timestamp.getTime()
     );
-  }
-  
-  // Get AI-initiated orders
-  getAIOrders(): Order[] {
-    return [...this.orders]
-      .filter(order => order.aiInitiated === true)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }
   
   // Add a log entry
@@ -610,34 +393,9 @@ class DhanService {
     // Simulate getting the current price
     return symbol === 'NIFTY' 
       ? 19500 + (Math.random() * 100) - 50
-      : symbol === 'CRYPTO_BTC'
-        ? 3500000 + (Math.random() * 100000) - 50000 
       : symbol.startsWith('CRYPTO_') 
         ? 10 + (Math.random() * 50000)
         : 500 + (Math.random() * 1000);
-  }
-  
-  // Track auto trading state for different assets
-  private autoTradingActive: Record<string, boolean> = {
-    'CRYPTO_BTC': false,
-    'NIFTY': false,
-    'BANKNIFTY': false
-  };
-  
-  // Check if automatic trading is active for a specific asset or for Bitcoin by default
-  isBitcoinAutoTradingActive(): boolean {
-    return this.autoTradingActive['CRYPTO_BTC'] || false;
-  }
-  
-  // New method to check if any asset is being auto-traded
-  isAutoTradingActive(symbol: string = 'CRYPTO_BTC'): boolean {
-    return this.autoTradingActive[symbol] || false;
-  }
-  
-  // Set auto trading status for a symbol
-  setAutoTradingStatus(symbol: string, active: boolean): void {
-    this.autoTradingActive[symbol] = active;
-    this.addLog(`Auto trading for ${symbol} ${active ? 'activated' : 'deactivated'}`, active ? 'success' : 'info');
   }
 }
 
