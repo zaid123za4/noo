@@ -18,11 +18,7 @@ export function useDemoMode() {
       
       // Add demo funds
       const demoFunds = 1000000; // 10 lakhs
-      // Updating funds directly since we're in demo mode
-      if (dhanService.mockFunds) {
-        dhanService.mockFunds.equity.available.cash = demoFunds;
-        dhanService.addLog("Demo mode activated with ₹" + demoFunds.toLocaleString(), "info");
-      }
+      dhanService.addDemoFunds(demoFunds);
       
       toast({
         title: "Demo Mode Active",
