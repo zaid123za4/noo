@@ -13,7 +13,7 @@ import { toast } from "@/components/ui/use-toast";
 
 // Execute trades based on the trading strategy
 export async function autoTradeExecutor(
-  symbol: string = 'NIFTY',
+  symbol: string = 'CRYPTO_BTC', // Default to Bitcoin trading
   quantity: number = 1
 ): Promise<void> {
   try {
@@ -38,7 +38,10 @@ export async function autoTradeExecutor(
         return;
       }
       
-      if (prediction.confidence >= 0.7) {
+      // For Bitcoin, we want to be more aggressive with trades
+      const confidenceThreshold = symbol === 'CRYPTO_BTC' ? 0.6 : 0.7;
+      
+      if (prediction.confidence >= confidenceThreshold) {
         // Confidence is high enough for automatic execution
         dhanService.addLog(
           `Auto-executing ${prediction.action} order for ${quantity} ${symbol} @ ₹${prediction.price.toFixed(2)} (confidence: ${(prediction.confidence * 100).toFixed(1)}%)`,
@@ -50,8 +53,14 @@ export async function autoTradeExecutor(
           symbol,
           prediction.action as 'BUY' | 'SELL', // Type assertion needed since we've checked action !== 'HOLD'
           quantity,
-          'MARKET'
+          'MARKET',
+          true  // Flag to indicate AI-initiated trade
         );
+        
+        toast({
+          title: "AI Trade Executed",
+          description: `${prediction.action} ${quantity} ${symbol} @ ₹${prediction.price.toFixed(2)}`,
+        });
       } else {
         // Confidence is too low, manual approval needed
         dhanService.addLog(
@@ -71,6 +80,51 @@ export async function autoTradeExecutor(
       'error'
     );
   }
+}
+
+// Run the Bitcoin trading strategy at regular intervals
+let btcAutoTradeInterval: NodeJS.Timeout | null = null;
+
+export function startBitcoinAutoTrading(intervalMinutes: number = 5): void {
+  if (btcAutoTradeInterval) {
+    clearInterval(btcAutoTradeInterval);
+  }
+  
+  // Execute immediately once
+  autoTradeExecutor('CRYPTO_BTC');
+  
+  // Then set interval
+  btcAutoTradeInterval = setInterval(() => {
+    autoTradeExecutor('CRYPTO_BTC');
+  }, intervalMinutes * 60 * 1000);
+  
+  dhanService.addLog(
+    `Bitcoin auto-trading started with ${intervalMinutes} minute intervals`,
+    'info'
+  );
+  
+  toast({
+    title: "Bitcoin Auto-Trading Activated",
+    description: `AI will trade BTC every ${intervalMinutes} minutes`,
+  });
+}
+
+export function stopBitcoinAutoTrading(): void {
+  if (btcAutoTradeInterval) {
+    clearInterval(btcAutoTradeInterval);
+    btcAutoTradeInterval = null;
+    
+    dhanService.addLog('Bitcoin auto-trading stopped', 'info');
+    
+    toast({
+      title: "Bitcoin Auto-Trading Stopped",
+      description: "AI trading for BTC has been deactivated",
+    });
+  }
+}
+
+export function isBitcoinAutoTradingActive(): boolean {
+  return btcAutoTradeInterval !== null;
 }
 
 // New function to run the strategy on all available symbols

@@ -7,11 +7,13 @@ import dhanService from '@/services/dhanService';
 export function useDemoMode() {
   const location = useLocation();
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [usingRealMoney, setUsingRealMoney] = useState(false);
 
   useEffect(() => {
     // Check for demo parameter in URL
     const searchParams = new URLSearchParams(location.search);
     const isDemo = searchParams.get('demo') === 'true';
+    const isReal = searchParams.get('real') === 'true';
     
     if (isDemo && !isDemoMode) {
       setIsDemoMode(true);
@@ -25,7 +27,20 @@ export function useDemoMode() {
         description: `You're now using a demo account with ₹${demoFunds.toLocaleString()} virtual funds`,
       });
     }
-  }, [location, isDemoMode]);
 
-  return isDemoMode;
+    // Check if user wants to use real money
+    if (isReal && !usingRealMoney) {
+      setUsingRealMoney(true);
+      toast({
+        title: "Real Money Trading Active",
+        description: "Your wallet is now connected for real money trading",
+      });
+    }
+  }, [location, isDemoMode, usingRealMoney]);
+
+  return { 
+    isDemoMode, 
+    usingRealMoney,
+    toggleRealMoney: () => setUsingRealMoney(!usingRealMoney)
+  };
 }

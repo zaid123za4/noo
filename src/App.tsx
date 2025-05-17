@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
+import WalletPage from "./components/WalletPage";
 
 const queryClient = new QueryClient();
 
@@ -18,6 +19,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/wallet" element={<WalletPage />} />
           <Route path="/admin-panel" element={<AdminPanel />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
