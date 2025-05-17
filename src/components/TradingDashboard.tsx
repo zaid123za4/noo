@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import dhanService, { UserProfile, Funds, Order, Position } from '@/services/dhanService';
-import { History, Info, LineChart, BarChart4, Wallet } from 'lucide-react';
+import { History, Info, LineChart, BarChart4, Wallet, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -12,9 +12,23 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
+import { useDemoMode } from '@/hooks/use-demo-mode';
+import {
+  autoTradeExecutor,
+  runAllSymbolsStrategy,
+  executeManualTrade,
+  stopCurrentTrade
+} from '@/services/trading';
+import { 
+  getCurrentPosition, 
+  getAllActivePositions,
+  getSignalStrength 
+} from '@/services/trading/positionTracker';
+import { runTradingStrategy } from '@/services/trading/tradingStrategy';
 
 const TradingDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const isDemoMode = useDemoMode();
   
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [funds, setFunds] = useState<Funds | null>(null);
@@ -31,6 +45,14 @@ const TradingDashboard: React.FC = () => {
   const [orderPrice, setOrderPrice] = useState(0);
   const [orderMethod, setOrderMethod] = useState<'MARKET' | 'LIMIT'>('MARKET');
   const [availableStocks, setAvailableStocks] = useState<string[]>([]);
+  
+  // AI Trading state
+  const [selectedStrategySymbol, setSelectedStrategySymbol] = useState('NIFTY');
+  const [strategyRunning, setStrategyRunning] = useState(false);
+  const [autoTradingEnabled, setAutoTradingEnabled] = useState(false);
+  const [strategyIntervalId, setStrategyIntervalId] = useState<NodeJS.Timeout | null>(null);
+  const [lastPrediction, setLastPrediction] = useState<any>(null);
+  const [activePositions, setActivePositions] = useState<Record<string, 'BUY' | 'SELL' | null>>({});
   
   // Check if user is authenticated
   useEffect(() => {
@@ -54,8 +76,22 @@ const TradingDashboard: React.FC = () => {
     // Clean up on unmount
     return () => {
       if (refreshInterval) clearInterval(refreshInterval);
+      if (strategyIntervalId) clearInterval(strategyIntervalId);
     };
   }, [navigate]);
+  
+  // Update active positions from position tracker
+  useEffect(() => {
+    const updatePositionsFromTracker = () => {
+      setActivePositions(getAllActivePositions());
+    };
+    
+    updatePositionsFromTracker();
+    // Check every 10 seconds
+    const intervalId = setInterval(updatePositionsFromTracker, 10000);
+    
+    return () => clearInterval(intervalId);
+  }, []);
   
   // Load dashboard data
   const loadData = async () => {
@@ -83,6 +119,11 @@ const TradingDashboard: React.FC = () => {
       // Set default symbol if needed
       if (!orderSymbol && symbolsData.stocks.length > 0) {
         setOrderSymbol(symbolsData.stocks[0]);
+      }
+      
+      // Set default strategy symbol if needed
+      if (!selectedStrategySymbol && symbolsData.stocks.length > 0) {
+        setSelectedStrategySymbol(symbolsData.stocks[0]);
       }
       
     } catch (error) {
@@ -138,6 +179,130 @@ const TradingDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+  
+  // AI Trading Functions
+  const runTradingStrategyOnce = async () => {
+    try {
+      setStrategyRunning(true);
+      const prediction = await runTradingStrategy(selectedStrategySymbol);
+      setLastPrediction(prediction);
+      
+      toast({
+        title: `Strategy Result: ${prediction.action}`,
+        description: prediction.message,
+      });
+      
+    } catch (error) {
+      console.error('Error running trading strategy:', error);
+      toast({
+        variant: "destructive",
+        title: "Strategy Error",
+        description: `Failed to run strategy: ${(error as Error).message}`,
+      });
+    } finally {
+      setStrategyRunning(false);
+    }
+  };
+  
+  const toggleAutoTrading = () => {
+    if (autoTradingEnabled) {
+      // Stop auto-trading
+      if (strategyIntervalId) {
+        clearInterval(strategyIntervalId);
+        setStrategyIntervalId(null);
+      }
+      setAutoTradingEnabled(false);
+      toast({
+        title: "Auto Trading Disabled",
+        description: "AI trading has been turned off",
+      });
+    } else {
+      // Start auto-trading
+      setAutoTradingEnabled(true);
+      
+      // Run once immediately
+      autoTradeExecutor(selectedStrategySymbol)
+        .catch(error => console.error('Error in auto trade execution:', error));
+      
+      // Then run every 5 minutes
+      const intervalId = setInterval(() => {
+        autoTradeExecutor(selectedStrategySymbol)
+          .catch(error => console.error('Error in auto trade execution:', error));
+      }, 5 * 60 * 1000);
+      
+      setStrategyIntervalId(intervalId);
+      
+      toast({
+        title: "Auto Trading Enabled",
+        description: `AI will automatically trade ${selectedStrategySymbol} every 5 minutes`,
+      });
+    }
+  };
+  
+  const executeTrade = async (symbol: string, action: 'BUY' | 'SELL') => {
+    try {
+      setLoading(true);
+      await executeManualTrade(symbol, action);
+      loadData();
+    } catch (error) {
+      console.error('Error executing trade:', error);
+      toast({
+        variant: "destructive",
+        title: "Trade Error",
+        description: `Failed to execute ${action} for ${symbol}`,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const closePosition = async (symbol: string) => {
+    try {
+      setLoading(true);
+      const position = getCurrentPosition(symbol);
+      if (position) {
+        await stopCurrentTrade(symbol, position, orderQuantity);
+        loadData();
+        
+        toast({
+          title: "Position Closed",
+          description: `Successfully closed ${position} position for ${symbol}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error closing position:', error);
+      toast({
+        variant: "destructive",
+        title: "Close Position Error",
+        description: `Failed to close position for ${symbol}`,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const getSignalStrengthUI = (symbol: string) => {
+    const signalValue = getSignalStrength(symbol);
+    
+    // Determine color based on signal strength
+    let color = "bg-gray-200";
+    if (signalValue >= 70) color = "bg-green-500";
+    else if (signalValue >= 55) color = "bg-green-300";
+    else if (signalValue >= 45) color = "bg-gray-400";
+    else if (signalValue >= 30) color = "bg-red-300";
+    else color = "bg-red-500";
+    
+    return (
+      <div className="flex items-center mt-1">
+        <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div className={`h-2.5 rounded-full ${color}`} style={{width: `${signalValue}%`}}></div>
+        </div>
+        <span className="ml-2 text-sm font-medium">
+          {signalValue < 50 ? `${100-signalValue}% Bearish` : `${signalValue}% Bullish`}
+        </span>
+      </div>
+    );
   };
   
   // Format currency (INR)
@@ -386,7 +551,7 @@ const TradingDashboard: React.FC = () => {
         
         {/* Main content tabs */}
         <Tabs defaultValue="positions" className="w-full">
-          <TabsList className="grid grid-cols-4 max-w-[600px]">
+          <TabsList className="grid grid-cols-5 max-w-[700px]">
             <TabsTrigger value="positions" className="flex items-center gap-2">
               <LineChart className="h-4 w-4" />
               <span>Positions</span>
@@ -398,6 +563,10 @@ const TradingDashboard: React.FC = () => {
             <TabsTrigger value="funds" className="flex items-center gap-2">
               <Wallet className="h-4 w-4" />
               <span>Funds</span>
+            </TabsTrigger>
+            <TabsTrigger value="ai-trading" className="flex items-center gap-2">
+              <Bot className="h-4 w-4" />
+              <span>AI Trading</span>
             </TabsTrigger>
             <TabsTrigger value="logs" className="flex items-center gap-2">
               <Info className="h-4 w-4" />
@@ -541,6 +710,206 @@ const TradingDashboard: React.FC = () => {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          {/* AI Trading Tab */}
+          <TabsContent value="ai-trading">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">AI Trading</CardTitle>
+                <CardDescription>
+                  Smart algorithmic trading strategies
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-6">
+                    <div>
+                      <Label htmlFor="strategy-symbol" className="mb-2 block">Select Symbol</Label>
+                      <Select
+                        value={selectedStrategySymbol}
+                        onValueChange={setSelectedStrategySymbol}
+                      >
+                        <SelectTrigger id="strategy-symbol">
+                          <SelectValue placeholder="Select symbol" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableStocks.map(stock => (
+                            <SelectItem key={stock} value={stock}>{stock}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="flex flex-col gap-3">
+                      <Button
+                        onClick={runTradingStrategyOnce}
+                        disabled={strategyRunning || loading}
+                        className="relative"
+                      >
+                        <Bot className="mr-2 h-4 w-4" />
+                        Run Analysis Once
+                      </Button>
+                      
+                      <Button
+                        onClick={toggleAutoTrading}
+                        variant={autoTradingEnabled ? "destructive" : "default"}
+                      >
+                        {autoTradingEnabled ? (
+                          <>Stop Auto Trading</>
+                        ) : (
+                          <>Start Auto Trading</>
+                        )}
+                      </Button>
+                    </div>
+                    
+                    {lastPrediction && (
+                      <Card>
+                        <CardHeader className="py-3">
+                          <CardTitle className="text-sm">Latest Analysis Result</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pb-3">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Action</span>
+                              <Badge
+                                className={
+                                  lastPrediction.action === 'BUY'
+                                    ? 'bg-green-500'
+                                    : lastPrediction.action === 'SELL'
+                                    ? 'bg-red-500'
+                                    : 'bg-gray-500'
+                                }
+                              >
+                                {lastPrediction.action}
+                              </Badge>
+                            </div>
+                            
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Confidence</span>
+                              <span>{(lastPrediction.confidence * 100).toFixed(1)}%</span>
+                            </div>
+                            
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Price</span>
+                              <span className="font-mono">₹{lastPrediction.price.toFixed(2)}</span>
+                            </div>
+                            
+                            <div className="mt-2">
+                              <span className="text-muted-foreground">Signal Strength</span>
+                              {getSignalStrengthUI(selectedStrategySymbol)}
+                            </div>
+                            
+                            <div className="mt-2">
+                              <p className="text-sm text-muted-foreground mt-2">{lastPrediction.message}</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-medium mb-4">Active AI Positions</h3>
+                      {Object.keys(activePositions).length === 0 ? (
+                        <p className="text-muted-foreground">No active AI positions</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {Object.entries(activePositions).map(([symbol, position]) => 
+                            position && (
+                              <Card key={symbol}>
+                                <CardContent className="p-4">
+                                  <div className="flex justify-between items-center">
+                                    <div>
+                                      <div className="font-medium">{symbol}</div>
+                                      <Badge
+                                        className={position === 'BUY' ? 'bg-green-500 mt-1' : 'bg-red-500 mt-1'}
+                                      >
+                                        {position}
+                                      </Badge>
+                                      {getSignalStrengthUI(symbol)}
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => closePosition(symbol)}
+                                      >
+                                        Close Position
+                                      </Button>
+                                      <div className="flex gap-1">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="w-1/2 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white"
+                                          onClick={() => executeTrade(symbol, 'BUY')}
+                                        >
+                                          Buy
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="w-1/2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white"
+                                          onClick={() => executeTrade(symbol, 'SELL')}
+                                        >
+                                          Sell
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <Card>
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm">AI Trading Settings</CardTitle>
+                      </CardHeader>
+                      <CardContent className="pb-3">
+                        <div className="space-y-3">
+                          <div>
+                            <Label htmlFor="trade-interval" className="mb-1 block">Auto-Trading Interval</Label>
+                            <Select defaultValue="5min">
+                              <SelectTrigger id="trade-interval">
+                                <SelectValue placeholder="Select interval" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="5min">5 Minutes</SelectItem>
+                                <SelectItem value="15min">15 Minutes</SelectItem>
+                                <SelectItem value="30min">30 Minutes</SelectItem>
+                                <SelectItem value="60min">1 Hour</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          <div>
+                            <Label htmlFor="confidence-threshold" className="mb-1 block">Minimum Confidence</Label>
+                            <Select defaultValue="70">
+                              <SelectTrigger id="confidence-threshold">
+                                <SelectValue placeholder="Select threshold" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="50">50%</SelectItem>
+                                <SelectItem value="60">60%</SelectItem>
+                                <SelectItem value="70">70%</SelectItem>
+                                <SelectItem value="80">80%</SelectItem>
+                                <SelectItem value="90">90%</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

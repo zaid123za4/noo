@@ -88,11 +88,11 @@ const DHAN_API_URL = "https://api.dhan.co";
 
 // Dhan Service for API interaction
 class DhanService {
-  private staticToken: string = DHAN_API_TOKEN;
+  public staticToken: string = DHAN_API_TOKEN;
   private tradeLogs: TradeLog[] = [];
   private orders: Order[] = [];
   private positions: Position[] = [];
-  private mockProfile: UserProfile = {
+  public mockProfile: UserProfile = {
     user_id: '110263463', // Extracted from token
     user_name: 'Personal Trading Account',
     email: 'personal@example.com',
@@ -104,7 +104,7 @@ class DhanService {
     avatar_url: null
   };
   
-  private mockFunds: Funds = {
+  public mockFunds: Funds = {
     equity: {
       available: {
         cash: 50000,
