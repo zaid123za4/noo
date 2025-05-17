@@ -8,6 +8,7 @@ export function useDemoMode() {
   const location = useLocation();
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [usingRealMoney, setUsingRealMoney] = useState(false);
+  const [activeTrading, setActiveTrading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     // Check for demo parameter in URL
@@ -31,6 +32,8 @@ export function useDemoMode() {
     // Check if user wants to use real money
     if (isReal && !usingRealMoney) {
       setUsingRealMoney(true);
+      dhanService.setRealMoneyMode(true);
+      
       toast({
         title: "Real Money Trading Active",
         description: "Your wallet is now connected for real money trading",
@@ -38,9 +41,19 @@ export function useDemoMode() {
     }
   }, [location, isDemoMode, usingRealMoney]);
 
+  // Add a function to check trading status for different assets
+  const isAssetTradingActive = (symbol: string): boolean => {
+    return dhanService.isAutoTradingActive(symbol);
+  };
+
   return { 
     isDemoMode, 
     usingRealMoney,
-    toggleRealMoney: () => setUsingRealMoney(!usingRealMoney)
+    toggleRealMoney: () => {
+      const newState = !usingRealMoney;
+      setUsingRealMoney(newState);
+      return newState;
+    },
+    isAssetTradingActive
   };
 }

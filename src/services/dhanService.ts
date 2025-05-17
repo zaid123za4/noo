@@ -1,4 +1,3 @@
-
 // Dhan API Service
 
 import { toast } from "@/components/ui/use-toast";
@@ -616,6 +615,29 @@ class DhanService {
       : symbol.startsWith('CRYPTO_') 
         ? 10 + (Math.random() * 50000)
         : 500 + (Math.random() * 1000);
+  }
+  
+  // Track auto trading state for different assets
+  private autoTradingActive: Record<string, boolean> = {
+    'CRYPTO_BTC': false,
+    'NIFTY': false,
+    'BANKNIFTY': false
+  };
+  
+  // Check if automatic trading is active for a specific asset or for Bitcoin by default
+  isBitcoinAutoTradingActive(): boolean {
+    return this.autoTradingActive['CRYPTO_BTC'] || false;
+  }
+  
+  // New method to check if any asset is being auto-traded
+  isAutoTradingActive(symbol: string = 'CRYPTO_BTC'): boolean {
+    return this.autoTradingActive[symbol] || false;
+  }
+  
+  // Set auto trading status for a symbol
+  setAutoTradingStatus(symbol: string, active: boolean): void {
+    this.autoTradingActive[symbol] = active;
+    this.addLog(`Auto trading for ${symbol} ${active ? 'activated' : 'deactivated'}`, active ? 'success' : 'info');
   }
 }
 

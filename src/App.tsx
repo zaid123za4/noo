@@ -10,7 +10,14 @@ import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
 import WalletPage from "./components/WalletPage";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

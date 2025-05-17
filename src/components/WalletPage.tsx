@@ -11,7 +11,8 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/use-toast';
 import { useDemoMode } from '@/hooks/use-demo-mode';
 import dhanService, { WalletTransaction } from '@/services/dhanService';
-import { Bitcoin, Wallet, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Bitcoin, Wallet, ArrowUpDown, ArrowDown, ArrowUp, TrendingUp } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const WalletPage: React.FC = () => {
   const navigate = useNavigate();
@@ -20,6 +21,11 @@ const WalletPage: React.FC = () => {
   const [depositAmount, setDepositAmount] = useState<string>('');
   const [withdrawAmount, setWithdrawAmount] = useState<string>('');
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [selectedAsset, setSelectedAsset] = useState<string>('CRYPTO_BTC');
+  const [availableAssets, setAvailableAssets] = useState<{ stocks: string[], cryptos: string[] }>({
+    stocks: [],
+    cryptos: []
+  });
 
   useEffect(() => {
     if (!dhanService.isAuthenticated()) {
@@ -30,6 +36,11 @@ const WalletPage: React.FC = () => {
     // Get initial wallet info
     setWallet(dhanService.getWalletInfo());
     setTransactions(dhanService.getWalletTransactions());
+
+    // Get available symbols
+    dhanService.getAvailableSymbols().then(symbols => {
+      setAvailableAssets(symbols);
+    });
 
     // Update wallet info every 10 seconds
     const intervalId = setInterval(() => {
@@ -135,6 +146,34 @@ const WalletPage: React.FC = () => {
     });
   };
 
+  const toggleAutoTrading = (symbol: string) => {
+    const isActive = dhanService.isAutoTradingActive(symbol);
+    
+    import('@/services/trading/tradeExecutor').then(module => {
+      if (isActive) {
+        if (symbol === 'CRYPTO_BTC') {
+          module.stopBitcoinAutoTrading();
+        } else {
+          module.stopAssetAutoTrading(symbol);
+        }
+      } else {
+        if (symbol === 'CRYPTO_BTC') {
+          module.startBitcoinAutoTrading(5);
+        } else {
+          module.startAssetAutoTrading(symbol, 15); // 15-minute intervals for other assets
+        }
+      }
+    });
+  };
+
+  const renderAssetName = (symbol: string) => {
+    if (symbol === 'CRYPTO_BTC') return 'Bitcoin';
+    if (symbol === 'CRYPTO_ETH') return 'Ethereum';
+    if (symbol === 'NIFTY') return 'NIFTY 50';
+    if (symbol === 'BANKNIFTY') return 'Bank NIFTY';
+    return symbol;
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-6">
@@ -210,63 +249,83 @@ const WalletPage: React.FC = () => {
           </CardFooter>
         </Card>
 
-        {/* Bitcoin Trading Card */}
+        {/* AI Trading Card */}
         <Card className="col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Bitcoin className="h-5 w-5" /> Bitcoin Trading
+              <TrendingUp className="h-5 w-5" /> AI Trading
             </CardTitle>
             <CardDescription>
-              AI-powered BTC trading
+              AI-powered automated asset trading
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-col gap-4">
               <div>
-                <p className="text-sm font-medium">Status</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant={dhanService.isBitcoinAutoTradingActive() ? "default" : "outline"}>
-                    {dhanService.isBitcoinAutoTradingActive() ? "Active" : "Inactive"}
+                <Label htmlFor="asset-select">Select Asset</Label>
+                <Select 
+                  value={selectedAsset}
+                  onValueChange={setSelectedAsset}
+                >
+                  <SelectTrigger id="asset-select">
+                    <SelectValue placeholder="Select asset to trade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CRYPTO_BTC"><Bitcoin className="mr-2 h-4 w-4 inline" /> Bitcoin</SelectItem>
+                    {availableAssets.cryptos
+                      .filter(crypto => crypto !== 'CRYPTO_BTC')
+                      .map(crypto => (
+                        <SelectItem key={crypto} value={crypto}>
+                          {renderAssetName(crypto)}
+                        </SelectItem>
+                      ))
+                    }
+                    {availableAssets.stocks.slice(0, 5).map(stock => (
+                      <SelectItem key={stock} value={stock}>
+                        {renderAssetName(stock)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex justify-between items-center mt-2">
+                <div>
+                  <p className="text-sm font-medium">Status</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant={dhanService.isAutoTradingActive(selectedAsset) ? "default" : "outline"}>
+                      {dhanService.isAutoTradingActive(selectedAsset) ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Mode</p>
+                  <Badge variant={usingRealMoney ? "destructive" : "outline"} className="mt-1">
+                    {usingRealMoney ? "Real Money" : "Virtual"}
                   </Badge>
                 </div>
               </div>
-              <div>
-                <p className="text-sm font-medium">Mode</p>
-                <Badge variant={usingRealMoney ? "destructive" : "outline"} className="mt-1">
-                  {usingRealMoney ? "Real Money" : "Virtual"}
-                </Badge>
+              
+              <Separator className="my-2" />
+              
+              <div className="space-y-2">
+                <p className="text-sm font-medium">AI Trading Features</p>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• Automated buy/sell decisions</li>
+                  <li>• Market trend analysis</li>
+                  <li>• Risk management</li>
+                  <li>• 24/7 monitoring for crypto</li>
+                </ul>
               </div>
-            </div>
-            
-            <Separator className="my-4" />
-            
-            <div className="space-y-2">
-              <p className="text-sm font-medium">AI Trading Features</p>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• Automated buy/sell decisions</li>
-                <li>• Market trend analysis</li>
-                <li>• Risk management</li>
-                <li>• 24/7 monitoring</li>
-              </ul>
             </div>
           </CardContent>
           <CardFooter className="justify-center">
             <Button
-              onClick={() => {
-                if (dhanService.isBitcoinAutoTradingActive()) {
-                  import('@/services/trading/tradeExecutor').then(module => {
-                    module.stopBitcoinAutoTrading();
-                  });
-                } else {
-                  import('@/services/trading/tradeExecutor').then(module => {
-                    module.startBitcoinAutoTrading(5);
-                  });
-                }
-              }}
-              variant={dhanService.isBitcoinAutoTradingActive() ? "destructive" : "default"}
+              onClick={() => toggleAutoTrading(selectedAsset)}
+              variant={dhanService.isAutoTradingActive(selectedAsset) ? "destructive" : "default"}
               className="w-full"
             >
-              {dhanService.isBitcoinAutoTradingActive() ? "Stop AI Trading" : "Start AI Trading"}
+              {dhanService.isAutoTradingActive(selectedAsset) ? "Stop AI Trading" : "Start AI Trading"}
             </Button>
           </CardFooter>
         </Card>
@@ -371,7 +430,7 @@ const WalletPage: React.FC = () => {
                       <td className="py-3 text-sm">₹{tx.amount.toLocaleString()}</td>
                       <td className="py-3">
                         <Badge variant={
-                          tx.status === 'COMPLETED' ? "success" :
+                          tx.status === 'COMPLETED' ? "default" :
                           tx.status === 'PENDING' ? "outline" :
                           "destructive"
                         }>
