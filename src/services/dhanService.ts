@@ -1,3 +1,4 @@
+
 // Dhan API Service
 
 import { toast } from "@/components/ui/use-toast";
@@ -74,8 +75,8 @@ interface TradeLog {
 class DhanService {
   private isLoggedIn = false;
   private accessToken: string | null = null;
-  private clientId = 'YOUR_CLIENT_ID'; // Replace with your actual client ID
-  private redirectUri = 'https://mytradingapp.com/callback'; // Replace with your actual redirect URI
+  private clientId = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzQ5OTgyMDc0LCJ0b2tlbkNvbnN1bWVyVHlwZSI6IlNFTEYiLCJ3ZWJob29rVXJsIjoiIiwiZGhhbkNsaWVudElkIjoiMTEwMjYzNDYzNiJ9.CS7wLP0VXO-vOnr32oINIvlMU4aZVFmYzYmYQhx1HPm6UUoCmdGXbzZhtdtkuVYyl5dKh2Elq5rLQgf_LaoMXw';
+  private redirectUri = 'noo.lovable.app/callback';
   private tradeLogs: TradeLog[] = [];
   private orders: Order[] = [];
   private isDemoMode = false;
